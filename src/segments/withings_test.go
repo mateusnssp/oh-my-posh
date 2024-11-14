@@ -5,15 +5,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 
 	"github.com/stretchr/testify/assert"
-	mock2 "github.com/stretchr/testify/mock"
+	testify_ "github.com/stretchr/testify/mock"
 )
 
 type mockedWithingsAPI struct {
-	mock2.Mock
+	testify_.Mock
 }
 
 func (s *mockedWithingsAPI) GetMeasures(meastypes string) (*WithingsData, error) {
@@ -33,14 +33,14 @@ func (s *mockedWithingsAPI) GetSleep() (*WithingsData, error) {
 
 func TestWithingsSegment(t *testing.T) {
 	cases := []struct {
-		Case            string
-		ExpectedString  string
-		ExpectedEnabled bool
-		Template        string
 		MeasuresError   error
 		ActivitiesError error
 		SleepError      error
 		WithingsData    *WithingsData
+		Case            string
+		ExpectedString  string
+		Template        string
+		ExpectedEnabled bool
 	}{
 		{
 			Case:            "Error",
@@ -151,9 +151,9 @@ func TestWithingsSegment(t *testing.T) {
 		api.On("GetSleep").Return(tc.WithingsData, tc.SleepError)
 
 		withings := &Withings{
-			api:   api,
-			props: &properties.Map{},
+			api: api,
 		}
+		withings.Init(properties.Map{}, &mock.Environment{})
 
 		enabled := withings.Enabled()
 		assert.Equal(t, tc.ExpectedEnabled, enabled, tc.Case)
@@ -165,7 +165,7 @@ func TestWithingsSegment(t *testing.T) {
 			tc.Template = withings.Template()
 		}
 
-		var got = renderTemplate(&mock.MockedEnvironment{}, tc.Template, withings)
+		var got = renderTemplate(&mock.Environment{}, tc.Template, withings)
 		assert.Equal(t, tc.ExpectedString, got, tc.Case)
 	}
 }

@@ -1,13 +1,29 @@
 ---
 id: faq
 title: FAQ
-sidebar_label: 🤨 FAQ
+sidebar_label: 🤔 FAQ
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import Config from "@site/src/components/Config.js";
 
 Before validating anything, make sure you're on the [latest version][latest] of Oh My Posh and your terminal and shell are up-to-date.
+
+### My prompt is broken after upgrading to PowerShell 7.4
+
+PowerShell 7.4 has an [issue][pwsh-20733] in encoding which affects the rendering of Oh My Posh.
+You can work around this by forcing the entire shell to UTF8.
+
+```powershell
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+oh-my-posh init pwsh --config ~/custom.omp.json | Invoke-Expression
+```
+
+:::warning
+Forcing the entire session to UTF8 can have unwanted side effects for other executables. We can't be held liable for that,
+consider this a temporary workaround until the original PowerShell [issue][pwsh-20733] is resolved.
+:::
 
 ### I want to disable the upgrade notice
 
@@ -26,7 +42,19 @@ oh-my-posh enable notice
 ### The prompt is slow (delay in showing the prompt between commands)
 
 :::tip Windows
-Make sure Windows Defender, or your AntiVirus, has an exclusion [configured][exclusion].
+The delay you're experiencing may be linked to the real-time protection features of antivirus software.
+
+To potentially alleviate this delay, ensure that Windows Defender or your primary antivirus software has an [exclusion][exclusion] set for the full path of the executable. To identify the full path of the executable in question, you can run the following command in a PowerShell prompt:
+
+```powershell
+(Get-Command oh-my-posh).Source
+```
+
+Additionally, check your antivirus settings for features that actively scan scripts during execution. Even with exclusions set, some antivirus programs might still actively scan scripts, which can introduce a noticeable delay.
+:::
+
+:::caution
+Always proceed with caution to maintain a balance between system performance and security. Modifying security settings or adding exclusions can expose your system to potential threats.
 :::
 
 <Tabs
@@ -41,7 +69,7 @@ Make sure Windows Defender, or your AntiVirus, has an exclusion [configured][exc
 
 You can use the `oh-my-posh debug` functionality to see where Oh My Posh spends its time.
 In case there's no clear culprit (timings indicate everything's OK), chances are some modules are the culprit.
-We bootstrap a few PowerShell modules to maximise compatibility, but sometimes these can introduce unwanted side-effects.
+We bootstrap a few PowerShell modules to maximize compatibility, but sometimes these can introduce unwanted side-effects.
 
 The modules we support are:
 
@@ -73,6 +101,7 @@ but also that one misses certain interesting icons. You can fall back to any the
 or make use of a Nerd Font. Have a look at the [font][font] section for more context in case you're using all the right conditions.
 
 ### Text decoration styles like bold and dimmed don't work
+
 The text decoration styles are based on your terminal emulator's capabilities.
 
 A quick way to check if your terminal supports a specific style escape sequence is to take a look at the `terminfo` database, on Linux.
@@ -91,22 +120,21 @@ the steps [here][export] to export it to a local file so you can adjust the [seg
 
 In the example below, it's assumed that the execution segment's icon `\ueba2` has an unexpected space after it in Windows Terminal.
 
-```json
-{
-  "type": "executiontime",
-  "template": "\ueba2" // unexpected space
-}
-```
+<Config
+  data={{
+    type: "executiontime",
+    template: "\ueba2", // unexpected space
+  }}
+/>
 
 Adjust it by adding `\u2800` immediately after the icon.
 
-```json
-{
-  "type": "executiontime",
-  "template": "\ueba2\u2800" // solved
-}
-```
-
+<Config
+  data={{
+    type: "executiontime",
+    template: "\ueba2\u2800", // solved
+  }}
+/>
 
 ### Jetbrains terminals: Icons do not render
 
@@ -129,6 +157,7 @@ conda config --set changeps1 False
 ```
 
 ### Python venv: Prompt changes on activating virtual environment
+
 Virtual environments created with `venv` add the active environment's name to the prompt automatically.
 To disable this behaviour, set `VIRTUAL_ENV_DISABLE_PROMPT` environment variable to `1` on your system. Example files:
 
@@ -208,9 +237,10 @@ The issue is that PowerShell on Windows doesn't yet default to UTF-8. Resolve th
 If the location contains non-ASCII characters, non-UTF-8 PowerShell may provide a wrong path to Oh My Posh, which can break the initialization.
 
 The scenario for non-ASCII location:
-- Your computer has a non-ASCII user name.
+
+- Your computer has a non-ASCII username.
 - Your [config file](./installation/customize.mdx) is under your `$HOME`.
-:::
+  :::
 
 To do so, edit your `$PROFILE`, find the line that initializes Oh My Posh (as highlighted below), and change it to the following:
 
@@ -235,7 +265,7 @@ $OutputEncoding = [console]::InputEncoding = [console]::OutputEncoding = New-Obj
 ### Zsh: No command history (Ctrl+R does not work)
 
 This issue occurs when you're using plain zsh in combination with Oh My Posh.
-You fix this by can adding the right configuration to `~/.zshrc`.
+You can fix this by adding the right configuration to `~/.zshrc`.
 
 ```bash
 HISTFILE=~/.zsh_history
@@ -248,9 +278,50 @@ setopt appendhistory
 
 This is most likely caused by two Oh My Posh init lines in your `.zshrc`, remove one of them. See [here][zsh-init].
 
-### Fish: $(...) is not supported
+### Fish: Display current bind (Vim) mode
 
-You should update fish to v3.4.0 or higher. Fish supports `$(...)` and `"$(...)"` since v3.4.0, as described in its [changelog][fish-changelog].
+By default, Oh My Posh will not re-render the prompt (i.e., generate a new prompt) until a new command is run, so you should
+export `$fish_bind_mode` to `FISH__BIND_MODE` and call the `omp_repaint_prompt` function to do prompt re-rendering when
+`$fish_bind_mode` changes:
+
+```fish
+function rerender_on_bind_mode_change --on-variable fish_bind_mode
+    if test "$fish_bind_mode" != paste -a "$fish_bind_mode" != "$FISH__BIND_MODE"
+        set -gx FISH__BIND_MODE $fish_bind_mode
+        omp_repaint_prompt
+    end
+end
+```
+
+Next, mask the `fish_default_mode_prompt` function to prevent it from echoing the current mode:
+
+```fish
+function fish_default_mode_prompt --description "Display vi prompt mode"
+    # This function is masked and does nothing
+end
+```
+
+After that, you can use the value in a template. The following replicates the [example in the Fish documentation][fish-mode-prompt]:
+
+<Config
+  data={{
+    type: "text",
+    template:
+      '{{ if eq .Env.FISH__BIND_MODE "default" }}<red>[N]</>{{ else if eq .Env.FISH__BIND_MODE "insert" }}<green>[I]</>{{ else if eq .Env.FISH__BIND_MODE "replace_one" }}<green>[R]</>{{ else if eq .Env.FISH__BIND_MODE "visual"}}<brmagenta>[V]</>{{ else }}<red>[?]</>{{ end }}',
+  }}
+/>
+
+### Fish: Integrate with `Alt+←` and `Alt+→` Bindings to `prevd` and `nextd`
+
+Fish supports using `Alt+←` (Alt+Left) and `Alt+→` (Alt+Right) bindings to [navigate the directory history](https://fishshell.com/docs/current/interactive.html#id13).
+
+To have oh-my-posh update the directory context as the directory history is navigated, use a function that calls `omp_repaint_prompt` when the `$PWD` variable changes:
+
+```fish
+function rerender_on_dir_change --on-variable PWD
+  omp_repaint_prompt
+end
+```
 
 ### After updating my Nerd Font to a newer version, the prompt displays unknown characters
 
@@ -270,6 +341,7 @@ updated the icons themselves. A backup of the current config can be found in the
 
 This is a known problem with Xonsh. The issue is tracked [here][xonsh-issue].
 
+[pwsh-20733]: https://github.com/PowerShell/PowerShell/issues/20733
 [exclusion]: https://support.microsoft.com/en-us/windows/add-an-exclusion-to-windows-security-811816c0-4dfd-af4a-47e4-c301afe13b26
 [arch-terminfo]: https://wiki.archlinux.org/title/Bash/Prompt_customization#Terminfo_escape_sequences
 [ps-ansi-docs]: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_ansi_terminals?view=powershell-7.2
@@ -291,3 +363,4 @@ This is a known problem with Xonsh. The issue is tracked [here][xonsh-issue].
 [fish-changelog]: https://fishshell.com/docs/current/relnotes.html#id1
 [xonsh-issue]: https://github.com/xonsh/xonsh/issues/3810
 [zsh-init]: https://github.com/JanDeDobbeleer/oh-my-posh/discussions/3462#discussioncomment-5155790
+[fish-mode-prompt]: https://fishshell.com/docs/current/cmds/fish_mode_prompt.html#example

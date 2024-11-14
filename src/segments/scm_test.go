@@ -3,9 +3,9 @@ package segments
 import (
 	"testing"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -13,8 +13,8 @@ import (
 func TestScmStatusChanged(t *testing.T) {
 	cases := []struct {
 		Case     string
-		Expected bool
 		Status   ScmStatus
+		Expected bool
 	}{
 		{
 			Case:     "No changes",
@@ -105,78 +105,6 @@ func TestScmStatusString(t *testing.T) {
 	}
 }
 
-func TestTruncateBranch(t *testing.T) {
-	cases := []struct {
-		Case       string
-		Expected   string
-		Branch     string
-		FullBranch bool
-		MaxLength  interface{}
-	}{
-		{Case: "No limit", Expected: "are-belong-to-us", Branch: "/all-your-base/are-belong-to-us", FullBranch: false},
-		{Case: "No limit - larger", Expected: "are-belong", Branch: "/all-your-base/are-belong-to-us", FullBranch: false, MaxLength: 10.0},
-		{Case: "No limit - smaller", Expected: "all-your-base", Branch: "/all-your-base", FullBranch: false, MaxLength: 13.0},
-		{Case: "Invalid setting", Expected: "all-your-base", Branch: "/all-your-base", FullBranch: false, MaxLength: "burp"},
-		{Case: "Lower than limit", Expected: "all-your-base", Branch: "/all-your-base", FullBranch: false, MaxLength: 20.0},
-
-		{Case: "No limit - full branch", Expected: "/all-your-base/are-belong-to-us", Branch: "/all-your-base/are-belong-to-us", FullBranch: true},
-		{Case: "No limit - larger - full branch", Expected: "/all-your-base", Branch: "/all-your-base/are-belong-to-us", FullBranch: true, MaxLength: 14.0},
-		{Case: "No limit - smaller - full branch ", Expected: "/all-your-base", Branch: "/all-your-base", FullBranch: true, MaxLength: 14.0},
-		{Case: "Invalid setting - full branch", Expected: "/all-your-base", Branch: "/all-your-base", FullBranch: true, MaxLength: "burp"},
-		{Case: "Lower than limit - full branch", Expected: "/all-your-base", Branch: "/all-your-base", FullBranch: true, MaxLength: 20.0},
-	}
-
-	for _, tc := range cases {
-		props := properties.Map{
-			BranchMaxLength: tc.MaxLength,
-			FullBranchPath:  tc.FullBranch,
-		}
-		p := &Plastic{
-			scm: scm{
-				props: props,
-			},
-		}
-		assert.Equal(t, tc.Expected, p.truncateBranch(tc.Branch), tc.Case)
-	}
-}
-
-func TestTruncateBranchWithSymbol(t *testing.T) {
-	cases := []struct {
-		Case           string
-		Expected       string
-		Branch         string
-		FullBranch     bool
-		MaxLength      interface{}
-		TruncateSymbol interface{}
-	}{
-		{Case: "No limit", Expected: "are-belong-to-us", Branch: "/all-your-base/are-belong-to-us", FullBranch: false, TruncateSymbol: "..."},
-		{Case: "No limit - larger", Expected: "are-belong...", Branch: "/all-your-base/are-belong-to-us", FullBranch: false, MaxLength: 10.0, TruncateSymbol: "..."},
-		{Case: "No limit - smaller", Expected: "all-your-base", Branch: "/all-your-base", FullBranch: false, MaxLength: 13.0, TruncateSymbol: "..."},
-		{Case: "Invalid setting", Expected: "all-your-base", Branch: "/all-your-base", FullBranch: false, MaxLength: "burp", TruncateSymbol: "..."},
-		{Case: "Lower than limit", Expected: "all-your-base", Branch: "/all-your-base", FullBranch: false, MaxLength: 20.0, TruncateSymbol: "..."},
-
-		{Case: "No limit - full branch", Expected: "/all-your-base/are-belong-to-us", Branch: "/all-your-base/are-belong-to-us", FullBranch: true, TruncateSymbol: "..."},
-		{Case: "No limit - larger - full branch", Expected: "/all-your-base...", Branch: "/all-your-base/are-belong-to-us", FullBranch: true, MaxLength: 14.0, TruncateSymbol: "..."},
-		{Case: "No limit - smaller - full branch ", Expected: "/all-your-base", Branch: "/all-your-base", FullBranch: true, MaxLength: 14.0, TruncateSymbol: "..."},
-		{Case: "Invalid setting - full branch", Expected: "/all-your-base", Branch: "/all-your-base", FullBranch: true, MaxLength: "burp", TruncateSymbol: "..."},
-		{Case: "Lower than limit - full branch", Expected: "/all-your-base", Branch: "/all-your-base", FullBranch: true, MaxLength: 20.0, TruncateSymbol: "..."},
-	}
-
-	for _, tc := range cases {
-		props := properties.Map{
-			BranchMaxLength: tc.MaxLength,
-			TruncateSymbol:  tc.TruncateSymbol,
-			FullBranchPath:  tc.FullBranch,
-		}
-		p := &Plastic{
-			scm: scm{
-				props: props,
-			},
-		}
-		assert.Equal(t, tc.Expected, p.truncateBranch(tc.Branch), tc.Case)
-	}
-}
-
 func TestHasCommand(t *testing.T) {
 	cases := []struct {
 		Case            string
@@ -186,7 +114,7 @@ func TestHasCommand(t *testing.T) {
 		IsWslSharedPath bool
 		NativeFallback  bool
 	}{
-		{Case: "On Windows", ExpectedCommand: "git.exe", GOOS: platform.WINDOWS},
+		{Case: "On Windows", ExpectedCommand: "git.exe", GOOS: runtime.WINDOWS},
 		{Case: "Cache", ExpectedCommand: "git.exe", Command: "git.exe"},
 		{Case: "Non Windows", ExpectedCommand: "git"},
 		{Case: "Iside WSL2, non shared", ExpectedCommand: "git"},
@@ -195,20 +123,108 @@ func TestHasCommand(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		env := new(mock.MockedEnvironment)
+		env := new(mock.Environment)
 		env.On("GOOS").Return(tc.GOOS)
 		env.On("InWSLSharedDrive").Return(tc.IsWslSharedPath)
 		env.On("HasCommand", "git").Return(true)
 		env.On("HasCommand", "git.exe").Return(!tc.NativeFallback)
+
+		props := properties.Map{
+			NativeFallback: tc.NativeFallback,
+		}
+
 		s := &scm{
-			env: env,
-			props: properties.Map{
-				NativeFallback: tc.NativeFallback,
-			},
 			command: tc.Command,
 		}
+		s.Init(props, env)
 
 		_ = s.hasCommand(GITCOMMAND)
 		assert.Equal(t, tc.ExpectedCommand, s.command, tc.Case)
+	}
+}
+
+func TestFormatBranch(t *testing.T) {
+	cases := []struct {
+		MappedBranches   map[string]string
+		Case             string
+		Expected         string
+		Input            string
+		TruncateSymbol   string
+		BranchMaxLength  int
+		NoFullBranchPath bool
+	}{
+		{
+			Case:     "No settings",
+			Input:    "main",
+			Expected: "main",
+		},
+		{
+			Case:            "BranchMaxLength higher than branch name",
+			Input:           "main",
+			Expected:        "main",
+			BranchMaxLength: 10,
+		},
+		{
+			Case:            "BranchMaxLength lower than branch name",
+			Input:           "feature/test-this-branch",
+			Expected:        "featu",
+			BranchMaxLength: 5,
+		},
+		{
+			Case:            "BranchMaxLength lower than branch name, with truncate symbol",
+			Input:           "feature/test-this-branch",
+			Expected:        "feat…",
+			BranchMaxLength: 5,
+			TruncateSymbol:  "…",
+		},
+		{
+			Case:             "BranchMaxLength lower than branch name, with truncate symbol and no FullBranchPath",
+			Input:            "feature/test-this-branch",
+			Expected:         "test…",
+			BranchMaxLength:  5,
+			TruncateSymbol:   "…",
+			NoFullBranchPath: true,
+		},
+		{
+			Case:            "BranchMaxLength lower to branch name, with truncate symbol",
+			Input:           "feat",
+			Expected:        "feat",
+			BranchMaxLength: 5,
+			TruncateSymbol:  "…",
+		},
+		{
+			Case:     "Branch mapping, no BranchMaxLength",
+			Input:    "feat/my-new-feature",
+			Expected: "🚀 my-new-feature",
+			MappedBranches: map[string]string{
+				"feat/*": "🚀 ",
+				"bug/*":  "🐛 ",
+			},
+		},
+		{
+			Case:            "Branch mapping, with BranchMaxLength",
+			Input:           "feat/my-new-feature",
+			Expected:        "🚀 my-",
+			BranchMaxLength: 5,
+			MappedBranches: map[string]string{
+				"feat/*": "🚀 ",
+				"bug/*":  "🐛 ",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		props := properties.Map{
+			MappedBranches:  tc.MappedBranches,
+			BranchMaxLength: tc.BranchMaxLength,
+			TruncateSymbol:  tc.TruncateSymbol,
+			FullBranchPath:  !tc.NoFullBranchPath,
+		}
+
+		g := &Git{}
+		g.Init(props, nil)
+
+		got := g.formatBranch(tc.Input)
+		assert.Equal(t, tc.Expected, got, tc.Case)
 	}
 }

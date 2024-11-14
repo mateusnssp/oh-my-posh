@@ -3,8 +3,9 @@ package segments
 import (
 	"testing"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -13,7 +14,6 @@ func TestAWSSegment(t *testing.T) {
 	cases := []struct {
 		Case            string
 		ExpectedString  string
-		ExpectedEnabled bool
 		Profile         string
 		DefaultProfile  string
 		Vault           string
@@ -21,6 +21,7 @@ func TestAWSSegment(t *testing.T) {
 		DefaultRegion   string
 		ConfigFile      string
 		Template        string
+		ExpectedEnabled bool
 		DisplayDefault  bool
 	}{
 		{Case: "enabled with default user", ExpectedString: "default@eu-west", Region: "eu-west", ExpectedEnabled: true, DisplayDefault: true},
@@ -51,7 +52,7 @@ func TestAWSSegment(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		env := new(mock.MockedEnvironment)
+		env := new(mock.Environment)
 		env.On("Getenv", "AWS_VAULT").Return(tc.Vault)
 		env.On("Getenv", "AWS_PROFILE").Return(tc.Profile)
 		env.On("Getenv", "AWS_DEFAULT_PROFILE").Return(tc.DefaultProfile)
@@ -63,13 +64,15 @@ func TestAWSSegment(t *testing.T) {
 		props := properties.Map{
 			properties.DisplayDefault: tc.DisplayDefault,
 		}
-		aws := &Aws{
-			env:   env,
-			props: props,
-		}
+		env.On("Flags").Return(&runtime.Flags{})
+
+		aws := &Aws{}
+		aws.Init(props, env)
+
 		if tc.Template == "" {
 			tc.Template = aws.Template()
 		}
+
 		assert.Equal(t, tc.ExpectedEnabled, aws.Enabled(), tc.Case)
 		assert.Equal(t, tc.ExpectedString, renderTemplate(env, tc.Template, aws), tc.Case)
 	}

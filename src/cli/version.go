@@ -17,7 +17,7 @@ var versionCmd = &cobra.Command{
 	Short: "Print the version",
 	Long:  "Print the version number of oh-my-posh.",
 	Args:  cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		if !verbose {
 			fmt.Println(build.Version)
 			return
@@ -27,7 +27,7 @@ var versionCmd = &cobra.Command{
 	},
 }
 
-func init() { //nolint:gochecknoinits
+func init() {
 	versionCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "write verbose output")
 	RootCmd.AddCommand(versionCmd)
 }

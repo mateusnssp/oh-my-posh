@@ -3,59 +3,53 @@ package segments
 import (
 	"testing"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestPlasticEnabledNotFound(t *testing.T) {
-	env := new(mock.MockedEnvironment)
+	env := new(mock.Environment)
 	env.On("HasCommand", "cm").Return(false)
 	env.On("GOOS").Return("")
 	env.On("IsWsl").Return(false)
-	p := &Plastic{
-		scm: scm{
-			env:   env,
-			props: properties.Map{},
-		},
-	}
+
+	p := &Plastic{}
+	p.Init(properties.Map{}, env)
+
 	assert.False(t, p.Enabled())
 }
 
 func TestPlasticEnabledInWorkspaceDirectory(t *testing.T) {
-	env := new(mock.MockedEnvironment)
+	env := new(mock.Environment)
 	env.On("HasCommand", "cm").Return(true)
 	env.On("GOOS").Return("")
 	env.On("IsWsl").Return(false)
 	env.On("FileContent", "/dir/.plastic//plastic.selector").Return("")
-	fileInfo := &platform.FileInfo{
+	fileInfo := &runtime.FileInfo{
 		Path:         "/dir/hello",
 		ParentFolder: "/dir",
 		IsDir:        true,
 	}
-	env.On("HasParentFilePath", ".plastic").Return(fileInfo, nil)
-	p := &Plastic{
-		scm: scm{
-			env:   env,
-			props: properties.Map{},
-		},
-	}
+	env.On("HasParentFilePath", ".plastic", false).Return(fileInfo, nil)
+
+	p := &Plastic{}
+	p.Init(properties.Map{}, env)
+
 	assert.True(t, p.Enabled())
 	assert.Equal(t, fileInfo.ParentFolder, p.plasticWorkspaceFolder)
 }
 
 func setupCmStatusEnv(status, headStatus string) *Plastic {
-	env := new(mock.MockedEnvironment)
+	env := new(mock.Environment)
 	env.On("RunCommand", "cm", []string{"status", "--all", "--machinereadable"}).Return(status, nil)
 	env.On("RunCommand", "cm", []string{"status", "--head", "--machinereadable"}).Return(headStatus, nil)
-	p := &Plastic{
-		scm: scm{
-			env:   env,
-			props: properties.Map{},
-		},
-	}
+
+	p := &Plastic{}
+	p.Init(properties.Map{}, env)
+
 	return p
 }
 
@@ -69,9 +63,9 @@ func TestPlasticGetCmOutputForCommand(t *testing.T) {
 func TestPlasticStatusBehind(t *testing.T) {
 	cases := []struct {
 		Case     string
-		Expected bool
 		Status   string
 		Head     string
+		Expected bool
 	}{
 		{
 			Case:     "Not behind",
@@ -97,8 +91,8 @@ func TestPlasticStatusBehind(t *testing.T) {
 func TestPlasticStatusChanged(t *testing.T) {
 	cases := []struct {
 		Case     string
-		Expected bool
 		Status   string
+		Expected bool
 	}{
 		{
 			Case:     "No changes",
@@ -164,8 +158,8 @@ func TestPlasticStatusCounts(t *testing.T) {
 func TestPlasticMergePending(t *testing.T) {
 	cases := []struct {
 		Case     string
-		Expected bool
 		Status   string
+		Expected bool
 	}{
 		{
 			Case:     "No pending merge",
@@ -188,10 +182,10 @@ func TestPlasticMergePending(t *testing.T) {
 func TestPlasticParseIntPattern(t *testing.T) {
 	cases := []struct {
 		Case     string
-		Expected int
 		Text     string
 		Pattern  string
 		Name     string
+		Expected int
 		Default  int
 	}{
 		{
@@ -287,10 +281,10 @@ func TestPlasticStatus(t *testing.T) {
 
 func TestPlasticTemplateString(t *testing.T) {
 	cases := []struct {
+		Plastic  *Plastic
 		Case     string
 		Expected string
 		Template string
-		Plastic  *Plastic
 	}{
 		{
 			Case:     "Default template",
@@ -333,7 +327,7 @@ func TestPlasticTemplateString(t *testing.T) {
 			FetchStatus: true,
 		}
 		tc.Plastic.props = props
-		env := new(mock.MockedEnvironment)
+		env := new(mock.Environment)
 		tc.Plastic.env = env
 		assert.Equal(t, tc.Expected, renderTemplate(env, tc.Template, tc.Plastic), tc.Case)
 	}

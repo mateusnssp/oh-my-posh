@@ -4,8 +4,8 @@ import (
 	"errors"
 	"path"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/log"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 
 	"gopkg.in/ini.v1"
 )
@@ -15,8 +15,7 @@ const (
 )
 
 type Gcp struct {
-	props properties.Properties
-	env   platform.Environment
+	base
 
 	Account string
 	Project string
@@ -27,16 +26,11 @@ func (g *Gcp) Template() string {
 	return " {{ .Project }} "
 }
 
-func (g *Gcp) Init(props properties.Properties, env platform.Environment) {
-	g.props = props
-	g.env = env
-}
-
 func (g *Gcp) Enabled() bool {
 	cfgDir := g.getConfigDirectory()
 	configFile, err := g.getActiveConfig(cfgDir)
 	if err != nil {
-		g.env.Error(err)
+		log.Error(err)
 		return false
 	}
 
@@ -44,13 +38,13 @@ func (g *Gcp) Enabled() bool {
 	cfg := g.env.FileContent(cfgpath)
 
 	if len(cfg) == 0 {
-		g.env.Error(errors.New("config file is empty"))
+		log.Error(errors.New("config file is empty"))
 		return false
 	}
 
 	data, err := ini.Load([]byte(cfg))
 	if err != nil {
-		g.env.Error(err)
+		log.Error(err)
 		return false
 	}
 
@@ -75,8 +69,10 @@ func (g *Gcp) getConfigDirectory() string {
 	if len(cfgDir) != 0 {
 		return cfgDir
 	}
-	if g.env.GOOS() == platform.WINDOWS {
+
+	if g.env.GOOS() == runtime.WINDOWS {
 		return path.Join(g.env.Getenv("APPDATA"), "gcloud")
 	}
+
 	return path.Join(g.env.Home(), ".config", "gcloud")
 }

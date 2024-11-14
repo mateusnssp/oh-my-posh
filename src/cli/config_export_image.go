@@ -3,20 +3,23 @@ package cli
 import (
 	"fmt"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/ansi"
-	"github.com/jandedobbeleer/oh-my-posh/src/engine"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
+	"github.com/jandedobbeleer/oh-my-posh/src/config"
+	"github.com/jandedobbeleer/oh-my-posh/src/image"
+	"github.com/jandedobbeleer/oh-my-posh/src/prompt"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 	"github.com/jandedobbeleer/oh-my-posh/src/shell"
+	"github.com/jandedobbeleer/oh-my-posh/src/template"
+	"github.com/jandedobbeleer/oh-my-posh/src/terminal"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	author        string
-	cursorPadding int
-	rPromptOffset int
-	bgColor       string
-	outputImage   string
+	author string
+	// cursorPadding int
+	// rPromptOffset int
+	bgColor     string
+	outputImage string
 )
 
 // imageCmd represents the image command
@@ -46,47 +49,49 @@ Exports the config to an image file ~/mytheme.png.
 
 Exports the config to an image file using customized output options.`,
 	Args: cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
-		env := &platform.Shell{
-			CmdFlags: &platform.Flags{
-				Config: config,
-				Shell:  shell.GENERIC,
-			},
-		}
-		env.Init()
-		defer env.Close()
-		cfg := engine.LoadConfig(env)
+	Run: func(_ *cobra.Command, _ []string) {
+		configFile := config.Path(configFlag)
+		cfg := config.Load(configFile, shell.GENERIC, false)
 
-		// set dsane defaults for things we don't print
+		flags := &runtime.Flags{
+			Config:        configFile,
+			Shell:         shell.GENERIC,
+			TerminalWidth: 150,
+		}
+
+		env := &runtime.Terminal{}
+		env.Init(flags)
+
+		template.Init(env, cfg.Var)
+
+		defer func() {
+			template.SaveCache()
+			env.Close()
+		}()
+
+		// set sane defaults for things we don't print
 		cfg.ConsoleTitleTemplate = ""
 		cfg.PWD = ""
 
-		writerColors := cfg.MakeColors()
-		writer := &ansi.Writer{
-			TerminalBackground: shell.ConsoleBackgroundColor(env, cfg.TerminalBackground),
-			AnsiColors:         writerColors,
-			TrueColor:          env.CmdFlags.TrueColor,
-		}
-		writer.Init(shell.GENERIC)
-		eng := &engine.Engine{
+		terminal.Init(shell.GENERIC)
+		terminal.BackgroundColor = cfg.TerminalBackground.ResolveTemplate()
+		terminal.Colors = cfg.MakeColors(env)
+
+		eng := &prompt.Engine{
 			Config: cfg,
 			Env:    env,
-			Writer: writer,
 		}
 
-		prompt := eng.Primary()
+		primaryPrompt := eng.Primary()
 
-		imageCreator := &engine.ImageRenderer{
-			AnsiString:    prompt,
-			Author:        author,
-			CursorPadding: cursorPadding,
-			RPromptOffset: rPromptOffset,
-			BgColor:       bgColor,
-			Ansi:          writer,
+		imageCreator := &image.Renderer{
+			AnsiString: primaryPrompt,
+			Author:     author,
+			BgColor:    bgColor,
 		}
 
 		if outputImage != "" {
-			imageCreator.Path = cleanOutputPath(outputImage, env)
+			imageCreator.Path = cleanOutputPath(outputImage)
 		}
 
 		err := imageCreator.Init(env)
@@ -102,11 +107,9 @@ Exports the config to an image file using customized output options.`,
 	},
 }
 
-func init() { //nolint:gochecknoinits
+func init() {
 	imageCmd.Flags().StringVar(&author, "author", "", "config author")
 	imageCmd.Flags().StringVar(&bgColor, "background-color", "", "image background color")
-	imageCmd.Flags().IntVar(&cursorPadding, "cursor-padding", 0, "prompt cursor padding")
-	imageCmd.Flags().IntVar(&rPromptOffset, "rprompt-offset", 0, "right prompt offset")
 	imageCmd.Flags().StringVarP(&outputImage, "output", "o", "", "image file (.png) to export to")
 	exportCmd.AddCommand(imageCmd)
 }

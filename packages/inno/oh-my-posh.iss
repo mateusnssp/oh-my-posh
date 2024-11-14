@@ -1,6 +1,7 @@
 [Setup]
 AppName=Oh My Posh
 AppVersion=<VERSION>
+VersionInfoVersion=<VERSION>
 DefaultDirName={autopf}\oh-my-posh
 DefaultGroupName=Oh My Posh
 AppPublisher=Jan De Dobbeleer
@@ -8,6 +9,7 @@ AppPublisherURL=https://ohmyposh.dev
 AppSupportURL=https://github.com/JanDeDobbeleer/oh-my-posh/issues
 LicenseFile="bin\COPYING.txt"
 OutputBaseFilename=install
+UninstallDisplayIcon={app}\bin\oh-my-posh.exe
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 ChangesEnvironment=yes
@@ -16,7 +18,7 @@ SignedUninstaller=yes
 CloseApplications=no
 
 [Files]
-Source: "bin\oh-my-posh.exe"; DestDir: "{app}\bin"; Flags: sign
+Source: "bin\oh-my-posh.exe"; DestDir: "{app}\bin"
 Source: "bin\themes\*"; DestDir: "{app}\themes"
 
 [Registry]

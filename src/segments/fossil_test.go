@@ -5,20 +5,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestFossilStatus(t *testing.T) {
 	cases := []struct {
+		OutputError      error
 		Case             string
 		Output           string
-		OutputError      error
-		HasCommand       bool
 		ExpectedStatus   string
 		ExpectedBranch   string
+		HasCommand       bool
 		ExpectedDisabled bool
 	}{
 		{
@@ -43,28 +43,36 @@ func TestFossilStatus(t *testing.T) {
 			parent:       e8a051e6a943a26c9c33a30df8ceda069c06c174 2022-06-04 23:09:02 UTC
 			tags:         trunk
 			comment:      In the /setup_skin page, add a mention of/link to /skins, per request in the forum. (user: stephan)
-			EDITED     auto.def
-			EDITED     configure
-			ADDED      test.tst
+			CONFLICT             test.tst
+			DELETED	             test.tst
+			MISSING              test.tst
+			ADDED                test.tst
+			ADDED_BY_INTEGRATE   test.tst
+			ADDED_BY_MERGE       test.tst
+			EDITED               auto.def
+			UPDATED              test.tst
+			UPDATED_BY_INTEGRATE test.tst
+			UPDATED_BY_MERGE 	 test.tst
+			CHANGED 	         test.tst
+			RENAMED 		     test.tst
 			`,
 			ExpectedBranch: "trunk",
-			ExpectedStatus: "+1 ~2",
+			ExpectedStatus: "+3 ~5 -2 >1 !1",
 		},
 	}
 	for _, tc := range cases {
-		env := new(mock.MockedEnvironment)
+		env := new(mock.Environment)
 		env.On("GOOS").Return("unix")
 		env.On("IsWsl").Return(false)
 		env.On("InWSLSharedDrive").Return(false)
 		env.On("HasCommand", FOSSILCOMMAND).Return(tc.HasCommand)
 		env.On("RunCommand", FOSSILCOMMAND, []string{"status"}).Return(strings.ReplaceAll(tc.Output, "\t", ""), tc.OutputError)
-		f := &Fossil{
-			scm: scm{
-				env:   env,
-				props: properties.Map{},
-			},
-		}
+
+		f := &Fossil{}
+		f.Init(properties.Map{}, env)
+
 		got := f.Enabled()
+
 		assert.Equal(t, !tc.ExpectedDisabled, got, tc.Case)
 		if tc.ExpectedDisabled {
 			continue

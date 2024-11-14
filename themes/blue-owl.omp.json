@@ -82,8 +82,9 @@
           "background": "#29315A",
           "foreground": "#43CCEA",
           "leading_diamond": "\ue0c5",
+          "trailing_diamond": "\ue0bc",
           "style": "diamond",
-          "template": "  {{ .UserName }}<transparent> / </>{{ .HostName }}",
+          "template": "  {{ .UserName }}<transparent> / </>{{ .HostName }} ",
           "type": "session"
         },
         {
@@ -92,8 +93,9 @@
           "properties": {
             "time_format": "15:04:05"
           },
-          "style": "plain",
-          "template": "<transparent> \ue0ba\ue0bc </>{{ .CurrentDate | date .Format }} ",
+          "leading_diamond": "\ue0ba",
+          "style": "diamond",
+          "template": " {{ .CurrentDate | date .Format }} ",
           "type": "time"
         }
       ],
@@ -120,5 +122,5 @@
     }
   ],
   "console_title_template": "{{if .Root}} \u26a1 {{end}}{{.Folder | replace \"~\" \"🏚\" }} @ {{.HostName}}",
-  "version": 2
+  "version": 3
 }

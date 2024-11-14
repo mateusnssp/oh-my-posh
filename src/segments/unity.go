@@ -6,23 +6,26 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
+	"github.com/jandedobbeleer/oh-my-posh/src/log"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/regex"
 )
 
 type Unity struct {
-	props properties.Properties
-	env   platform.Environment
+	base
 
 	UnityVersion  string
 	CSharpVersion string
 }
 
+func (u *Unity) Template() string {
+	return " \ue721 {{ .UnityVersion }}{{ if .CSharpVersion }} {{ .CSharpVersion }}{{ end }} "
+}
+
 func (u *Unity) Enabled() bool {
 	unityVersion, err := u.GetUnityVersion()
 	if err != nil {
-		u.env.Error(err)
+		log.Error(err)
 		return false
 	}
 	if len(unityVersion) == 0 {
@@ -32,7 +35,7 @@ func (u *Unity) Enabled() bool {
 
 	csharpVersion, err := u.GetCSharpVersion()
 	if err != nil {
-		u.env.Error(err)
+		log.Error(err)
 	}
 	u.CSharpVersion = csharpVersion
 
@@ -40,14 +43,14 @@ func (u *Unity) Enabled() bool {
 }
 
 func (u *Unity) GetUnityVersion() (string, error) {
-	projectDir, err := u.env.HasParentFilePath("ProjectSettings")
+	projectDir, err := u.env.HasParentFilePath("ProjectSettings", false)
 	if err != nil {
-		u.env.Debug("No ProjectSettings parent folder found")
+		log.Debug("no ProjectSettings parent folder found")
 		return "", err
 	}
 
 	if !u.env.HasFilesInDir(projectDir.Path, "ProjectVersion.txt") {
-		u.env.Debug("No ProjectVersion.txt file found")
+		log.Debug("no ProjectVersion.txt file found")
 		return "", err
 	}
 
@@ -112,15 +115,11 @@ func (u *Unity) GetCSharpVersion() (version string, err error) {
 		return csharpVersion, nil
 	}
 
-	u.env.Debug(fmt.Sprintf("Unity version %s doesn't exist in the map", shortUnityVersion))
+	log.Debug(fmt.Sprintf("Unity version %s doesn't exist in the map", shortUnityVersion))
 	return u.GetCSharpVersionFromWeb(shortUnityVersion)
 }
 
 func (u *Unity) GetCSharpVersionFromWeb(shortUnityVersion string) (version string, err error) {
-	if csharpVersion, found := u.env.Cache().Get(shortUnityVersion); found {
-		return csharpVersion, nil
-	}
-
 	url := fmt.Sprintf("https://docs.unity3d.com/%s/Documentation/Manual/CSharpCompiler.html", shortUnityVersion)
 	httpTimeout := u.props.GetInt(properties.HTTPTimeout, 2000)
 
@@ -135,19 +134,8 @@ func (u *Unity) GetCSharpVersionFromWeb(shortUnityVersion string) (version strin
 	matches := regex.FindNamedRegexMatch(pattern, pageContent)
 	if matches != nil && matches["csharpVersion"] != "" {
 		csharpVersion := strings.TrimSuffix(matches["csharpVersion"], ".0")
-		u.env.Cache().Set(shortUnityVersion, csharpVersion, -1)
 		return csharpVersion, nil
 	}
 
-	u.env.Cache().Set(shortUnityVersion, "", -1)
 	return "", nil
-}
-
-func (u *Unity) Template() string {
-	return " \ue721 {{ .UnityVersion }}{{ if .CSharpVersion }} {{ .CSharpVersion }}{{ end }} "
-}
-
-func (u *Unity) Init(props properties.Properties, env platform.Environment) {
-	u.props = props
-	u.env = env
 }

@@ -4,22 +4,22 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestWinReg(t *testing.T) {
 	cases := []struct {
+		Err             error
+		getWRKVOutput   *runtime.WindowsRegistryValue
 		CaseDescription string
 		Path            string
 		Fallback        string
-		ExpectedSuccess bool
 		ExpectedValue   string
-		getWRKVOutput   *platform.WindowsRegistryValue
-		Err             error
+		ExpectedSuccess bool
 	}{
 		{
 			CaseDescription: "Error",
@@ -30,7 +30,7 @@ func TestWinReg(t *testing.T) {
 		{
 			CaseDescription: "Value",
 			Path:            "HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\InstallTime",
-			getWRKVOutput:   &platform.WindowsRegistryValue{ValueType: platform.STRING, String: "xbox"},
+			getWRKVOutput:   &runtime.WindowsRegistryValue{ValueType: runtime.STRING, String: "xbox"},
 			ExpectedSuccess: true,
 			ExpectedValue:   "xbox",
 		},
@@ -45,7 +45,7 @@ func TestWinReg(t *testing.T) {
 		{
 			CaseDescription: "Empty string value (no error) should display empty string even in presence of fallback",
 			Path:            "HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\InstallTime",
-			getWRKVOutput:   &platform.WindowsRegistryValue{ValueType: platform.STRING, String: ""},
+			getWRKVOutput:   &runtime.WindowsRegistryValue{ValueType: runtime.STRING, String: ""},
 			Fallback:        "anaconda",
 			ExpectedSuccess: true,
 			ExpectedValue:   "",
@@ -53,23 +53,24 @@ func TestWinReg(t *testing.T) {
 		{
 			CaseDescription: "Empty string value (no error) should display empty string",
 			Path:            "HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\InstallTime",
-			getWRKVOutput:   &platform.WindowsRegistryValue{ValueType: platform.STRING, String: ""},
+			getWRKVOutput:   &runtime.WindowsRegistryValue{ValueType: runtime.STRING, String: ""},
 			ExpectedSuccess: true,
 			ExpectedValue:   "",
 		},
 	}
 
 	for _, tc := range cases {
-		env := new(mock.MockedEnvironment)
-		env.On("GOOS").Return(platform.WINDOWS)
+		env := new(mock.Environment)
+		env.On("GOOS").Return(runtime.WINDOWS)
 		env.On("WindowsRegistryKeyValue", tc.Path).Return(tc.getWRKVOutput, tc.Err)
-		r := &WindowsRegistry{
-			env: env,
-			props: properties.Map{
-				RegistryPath: tc.Path,
-				Fallback:     tc.Fallback,
-			},
+
+		props := properties.Map{
+			RegistryPath: tc.Path,
+			Fallback:     tc.Fallback,
 		}
+
+		r := &WindowsRegistry{}
+		r.Init(props, env)
 
 		assert.Equal(t, tc.ExpectedSuccess, r.Enabled(), tc.CaseDescription)
 		assert.Equal(t, tc.ExpectedValue, renderTemplate(env, r.Template(), r), tc.CaseDescription)

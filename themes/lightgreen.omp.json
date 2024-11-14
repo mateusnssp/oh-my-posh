@@ -12,7 +12,7 @@
           "type": "root"
         },
         {
-          "background": "#000000",
+          "background": "transparent",
           "foreground": "#ffffff",
           "properties": {
             "alpine": "\uf300",
@@ -156,5 +156,5 @@
     }
   ],
   "pwd": "osc99",
-  "version": 2
+  "version": 3
 }

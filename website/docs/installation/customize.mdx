@@ -1,7 +1,7 @@
 ---
 id: customize
 title: Customize
-sidebar_label: 💅🏼 Customize
+sidebar_label: 🧩 Customize
 ---
 
 import Tabs from "@theme/Tabs";
@@ -19,53 +19,19 @@ There are two possible values the `--config` flag can handle:
 - a path to a local configuration file
 
 ```powershell
-oh-my-posh init pwsh --config 'C:/Users/Posh/jandedobbeleer.omp.json' | Invoke-Expression
+--config 'C:/Users/Posh/jandedobbeleer.omp.json'
 ```
 
 - a URL pointing to a remote config
 
 ```powershell
-oh-my-posh init pwsh --config 'https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/jandedobbeleer.omp.json' | Invoke-Expression
+--config 'https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/jandedobbeleer.omp.json'
 ```
 
-### Get inspiration
+### Set the configuration
 
-The Windows and homebrew installers also bundle the **predefined configurations** ([themes][themes]). You can use the
-following way to reference them directly. This will keep them up-to-date and compatible with future updates.
-
-<Tabs
-  defaultValue="windows"
-  groupId="shell"
-  values={[
-    { label: 'windows', value: 'windows', },
-    { label: 'homebrew', value: 'homebrew', },
-  ]
-}>
-<TabItem value="windows">
-
-For example, to use the [jandedobbeleer][jandedobbeleer] theme, alter the init line like this (`powershell`):
-
-```powershell
-oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/jandedobbeleer.omp.json" | Invoke-Expression
-```
-
-</TabItem>
-<TabItem value="homebrew">
-
-When using homebrew, all themes are installed alongside Oh My Posh in `$(brew --prefix oh-my-posh)/themes`.
-To use any of the themes, use the following syntax (`zsh`):
-
-```bash
-eval "$(oh-my-posh init zsh --config $(brew --prefix oh-my-posh)/themes/jandedobbeleer.omp.json)"
-```
-
-</TabItem>
-</Tabs>
-
-### Config syntax
-
-The examples below use a local path to the [jandedobbeleer][jandedobbeleer] theme, adjust the `--config` value
-to reflect your use-case.
+The example below use a local path to the [jandedobbeleer][jandedobbeleer] theme, adjust the `--config` value
+to reflect your configuration file, local or remote.
 
 <Tabs
   defaultValue="powershell"
@@ -138,7 +104,7 @@ exec elvish
 <TabItem value="fish">
 
 :::caution
-Oh My Posh requires fish v3.4.0 or higher.
+It is recommended to use the latest version of Fish. Versions below 3.1.2 have issues displaying the prompt.
 :::
 
 Adjust the Oh My Posh init line in `~/.config/fish/config.fish` by adding the `--config` flag with
@@ -158,7 +124,7 @@ Once altered, reload your config for the changes to take effect.
 <TabItem value="nu">
 
 :::caution
-Oh My Posh requires Nushell v0.78.0 or higher.
+Oh My Posh requires Nushell v0.93.0 or higher.
 :::
 
 Adjust the Oh My Posh init line in the Nushell env file (`$nu.env-path`) by adding the `--config` flag
@@ -222,10 +188,10 @@ to only require remote scripts to be signed using `Set-ExecutionPolicy RemoteSig
 Adjust the Oh My Posh init line in `~/.tcshrc` by adding the `--config` flag with the location of your configuration.
 
 ```bash
-eval `oh-my-posh init tcsh --config ~/jandedobbeleer.omp.json`
+eval "`oh-my-posh init tcsh --config ~/jandedobbeleer.omp.json`"
 ```
 
-Once added, reload your profile for the changes to take effect.
+Note that the surrounding quotes are required. Once added, reload your profile for the changes to take effect.
 
 ```bash
 exec tcsh
@@ -271,15 +237,48 @@ Windows user's home folder.
 Inside the WSL, you can find your Windows user's home folder here: `/mnt/c/Users/<WINDOWSUSERNAME>`.
 :::
 
-### Adjust a theme
+### Themes
+
+The Windows and homebrew installers also bundle the **predefined configurations** ([themes][themes]). You can use the
+following way to reference them directly. This will keep them up-to-date and compatible with future updates.
+
+<Tabs
+  defaultValue="windows"
+  groupId="shell"
+  values={[
+    { label: 'windows', value: 'windows', },
+    { label: 'homebrew', value: 'homebrew', },
+  ]
+}>
+<TabItem value="windows">
+
+For example, to use the [jandedobbeleer][jandedobbeleer] theme, alter the init line like this (`powershell`):
+
+```powershell
+oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH/jandedobbeleer.omp.json" | Invoke-Expression
+```
+
+</TabItem>
+<TabItem value="homebrew">
+
+When using homebrew, all themes are installed alongside Oh My Posh in `$(brew --prefix oh-my-posh)/themes`.
+To use any of the themes, use the following syntax (`zsh`):
+
+```bash
+eval "$(oh-my-posh init zsh --config $(brew --prefix oh-my-posh)/themes/jandedobbeleer.omp.json)"
+```
+
+</TabItem>
+</Tabs>
+
+### Custom configuration
 
 Maybe there's a theme you like, but you don't fancy the colors. Or, maybe there's a segment you
 want to tweak/add, or replace some of the icons with a different one. Whatever the case, **read through
-available options first**, by starting with the [configuration guide][configuration].
+available options first**, by starting with the [configuration][configuration].
 
 You can export the current theme (default, or set via `--config`) to the format you like (`json`, `yaml`, or `toml`)
-which can be used to tweak and store as your own custom theme.
-
+which can be used to tweak and store as your own custom configuration.
 
 ```bash
 oh-my-posh config export --output ~/.mytheme.omp.json
@@ -298,7 +297,7 @@ The [configuration][configuration] section covers the basic building blocks and 
 segments section covers how to configure each available segment.
 
 [themes]: themes.md
-[configuration]: configuration/overview.mdx
+[configuration]: configuration/general.mdx
 [prompt]: prompt.mdx
 [jandedobbeleer]: /docs/themes#jandedobbeleer
 [json-schema]: https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json

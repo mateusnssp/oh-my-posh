@@ -7,7 +7,11 @@ import (
 	"bytes"
 	"io"
 	"path"
+	stdruntime "runtime"
 	"strings"
+
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/cmd"
 )
 
 func contains[S ~[]E, E comparable](s S, e E) bool {
@@ -31,6 +35,12 @@ func InstallZIP(data []byte, user bool) ([]string, error) {
 	fonts := make(map[string]*Font)
 
 	for _, zf := range zipReader.File {
+		// prevent zipslip attacks
+		// https://security.snyk.io/research/zip-slip-vulnerability
+		if strings.Contains(zf.Name, "..") {
+			continue
+		}
+
 		rc, err := zf.Open()
 		if err != nil {
 			return families, err
@@ -42,7 +52,7 @@ func InstallZIP(data []byte, user bool) ([]string, error) {
 			return families, err
 		}
 
-		fontData, err := newFont(zf.Name, data)
+		fontData, err := newFont(path.Base(zf.Name), data)
 		if err != nil {
 			continue
 		}
@@ -67,6 +77,11 @@ func InstallZIP(data []byte, user bool) ([]string, error) {
 		if !contains(families, font.Family) {
 			families = append(families, font.Family)
 		}
+	}
+
+	// Update the font cache when installing fonts on Linux
+	if stdruntime.GOOS == runtime.LINUX || stdruntime.GOOS == runtime.DARWIN {
+		_, _ = cmd.Run("fc-cache", "-f")
 	}
 
 	return families, nil

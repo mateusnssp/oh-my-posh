@@ -13,65 +13,59 @@ function global:Get-PoshStackCount {
     return 0
 }
 
+# global enablers
+$global:_ompJobCount = $false
+$global:_ompFTCSMarks = $false
+$global:_ompPoshGit = $false
+$global:_ompAzure = $false
+$global:_ompExecutable = ::OMP::
+
 New-Module -Name "oh-my-posh-core" -ScriptBlock {
+    # Check `ConstrainedLanguage` mode.
+    $script:ConstrainedLanguageMode = $ExecutionContext.SessionState.LanguageMode -eq "ConstrainedLanguage"
+
+    # Prompt related backup.
+    $script:OriginalPromptFunction = $Function:prompt
+    $script:OriginalContinuationPrompt = (Get-PSReadLineOption).ContinuationPrompt
+    $script:OriginalPromptText = (Get-PSReadLineOption).PromptText
+
+    $script:NoExitCode = $true
     $script:ErrorCode = 0
     $script:ExecutionTime = 0
-    $script:OMPExecutable = ::OMP::
     $script:ShellName = "::SHELL::"
     $script:PSVersion = $PSVersionTable.PSVersion.ToString()
     $script:TransientPrompt = $false
-    $script:ToolTipCommand = ""
+    $script:TooltipCommand = ''
+    $script:JobCount = 0
+
     $env:POWERLINE_COMMAND = "oh-my-posh"
     $env:POSH_SHELL_VERSION = $script:PSVersion
-    $env:POSH_PID = $PID
+    $env:POSH_SESSION_ID = ::SESSION_ID::
     $env:CONDA_PROMPT_MODIFIER = $false
 
     # set the default theme
-    if ((::CONFIG:: -ne '') -and (Test-Path -LiteralPath ::CONFIG::)) {
+    if (::CONFIG:: -and (Test-Path -LiteralPath ::CONFIG::)) {
         $env:POSH_THEME = (Resolve-Path -Path ::CONFIG::).ProviderPath
     }
 
-    # specific module support (disabled by default)
-    if (($null -eq $env:POSH_GIT_ENABLED) -or ($null -eq (Get-Module 'posh-git'))) {
-        $env:POSH_GIT_ENABLED = $false
-    }
-    if (($null -eq $env:POSH_AZURE_ENABLED) -or ($null -eq (Get-Module 'az'))) {
-        $env:POSH_AZURE_ENABLED = $false
-    }
+    function Invoke-Utf8Posh {
+        param([string[]]$Arguments = @())
 
-    function Initialize-ModuleSupport {
-        if ($env:POSH_GIT_ENABLED -eq $true) {
-            # We need to set the status so posh-git can facilitate autocomplete
-            $global:GitStatus = Get-GitStatus
-            $env:POSH_GIT_STATUS = $global:GitStatus | ConvertTo-Json
-        }
-        if ($env:POSH_AZURE_ENABLED -eq $true) {
-            $env:POSH_AZURE_SUBSCRIPTION = Get-AzContext | ConvertTo-Json
-        }
-    }
-
-    function Start-Utf8Process {
-        param(
-            [string]$FileName,
-            [string[]]$Arguments = @()
-        )
-
-        if ($ExecutionContext.SessionState.LanguageMode -eq "ConstrainedLanguage") {
-            $standardOut = Invoke-Expression "& `$FileName `$Arguments 2>&1"
-            $standardOut -join "`n"
+        if ($script:ConstrainedLanguageMode) {
+            $output = Invoke-Expression "& `$global:_ompExecutable `$Arguments 2>&1"
+            $output -join "`n"
             return
         }
 
         $Process = New-Object System.Diagnostics.Process
         $StartInfo = $Process.StartInfo
-        $StartInfo.FileName = $FileName
+        $StartInfo.FileName = $global:_ompExecutable
         if ($StartInfo.ArgumentList.Add) {
             # ArgumentList is supported in PowerShell 6.1 and later (built on .NET Core 2.1+)
             # ref-1: https://docs.microsoft.com/en-us/dotnet/api/system.diagnostics.processstartinfo.argumentlist?view=net-6.0
             # ref-2: https://docs.microsoft.com/en-us/powershell/scripting/whats-new/differences-from-windows-powershell?view=powershell-7.2#net-framework-vs-net-core
             $Arguments | ForEach-Object -Process { $StartInfo.ArgumentList.Add($_) }
-        }
-        else {
+        } else {
             # escape arguments manually in lower versions, refer to https://docs.microsoft.com/en-us/previous-versions/17w5ykft(v=vs.85)
             $escapedArgs = $Arguments | ForEach-Object {
                 # escape N consecutive backslash(es), which are followed by a double quote, to 2N consecutive ones
@@ -85,6 +79,7 @@ New-Module -Name "oh-my-posh-core" -ScriptBlock {
             }
             $StartInfo.Arguments = $escapedArgs -join ' '
         }
+
         $StartInfo.StandardErrorEncoding = $StartInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
         $StartInfo.RedirectStandardError = $StartInfo.RedirectStandardInput = $StartInfo.RedirectStandardOutput = $true
         $StartInfo.UseShellExecute = $false
@@ -97,129 +92,304 @@ New-Module -Name "oh-my-posh-core" -ScriptBlock {
             }
             $StartInfo.WorkingDirectory = $PWD.ProviderPath
         }
+
         $StartInfo.CreateNoWindow = $true
         [void]$Process.Start()
-        # we do this to remove a deadlock potential on Windows
+
+        # Remove deadlock potential on Windows.
         $stdoutTask = $Process.StandardOutput.ReadToEndAsync()
         $stderrTask = $Process.StandardError.ReadToEndAsync()
+
         $Process.WaitForExit()
         $stderr = $stderrTask.Result.Trim()
-        if ($stderr -ne '') {
+        if ($stderr) {
             $Host.UI.WriteErrorLine($stderr)
         }
+
         $stdoutTask.Result
     }
 
-    function Set-PoshContext {}
-
-    function Get-CleanPSWD {
-        $pswd = $PWD.ToString()
-        if ($pswd -ne '/') {
-            return $pswd.TrimEnd('\') -replace '^Microsoft\.PowerShell\.Core\\FileSystem::', ''
+    function Get-NonFSWD {
+        # We only need to return a non-filesystem working directory.
+        if ($PWD.Provider.Name -ne 'FileSystem') {
+            return $PWD.ToString()
         }
-        return $pswd
     }
 
-    if (("::TOOLTIPS::" -eq "true") -and ($ExecutionContext.SessionState.LanguageMode -ne "ConstrainedLanguage")) {
-        Set-PSReadLineKeyHandler -Key Spacebar -BriefDescription 'OhMyPoshSpaceKeyHandler' -ScriptBlock {
-            [Microsoft.PowerShell.PSConsoleReadLine]::Insert(' ')
-            $command = $null
-            [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$command, [ref]$null)
-            $command = $command.TrimStart().Split(" ", 2) | Select-Object -First 1
-            # ignore an empty/repeated tip
-            if ($command -eq '' -or $command -eq $script:ToolTipCommand) {
-                return
-            }
-            $position = $host.UI.RawUI.CursorPosition
-            $terminalWidth = $Host.UI.RawUI.WindowSize.Width
-            $cleanPSWD = Get-CleanPSWD
-            $standardOut = @(Start-Utf8Process $script:OMPExecutable @("print", "tooltip", "--status=$script:ErrorCode", "--shell=$script:ShellName", "--pswd=$cleanPSWD", "--config=$env:POSH_THEME", "--command=$command", "--shell-version=$script:PSVersion", "--column=$($position.X)", "--terminal-width=$terminalWidth"))
-            # ignore an empty tooltip
-            if ($standardOut -eq '') {
-                return
-            }
-            Write-Host $standardOut -NoNewline
-            $host.UI.RawUI.CursorPosition = $position
-            # cache the tip command
-            $script:ToolTipCommand = $command
-            # we need this workaround to prevent the text after cursor from disappearing when the tooltip is rendered
-            [Microsoft.PowerShell.PSConsoleReadLine]::Insert(' ')
-            [Microsoft.PowerShell.PSConsoleReadLine]::Undo()
+    function Get-TerminalWidth {
+        $terminalWidth = $Host.UI.RawUI.WindowSize.Width
+        # Set a sane default when the value can't be retrieved.
+        if (-not $terminalWidth) {
+            return 0
         }
+        $terminalWidth
+    }
+
+    function Get-FileHyperlink {
+        param(
+            [Parameter(Mandatory, ValuefromPipeline = $True)]
+            [string]$Uri,
+            [Parameter(ValuefromPipeline = $True)]
+            [string]$Name
+        )
+
+        if (!$Name) {
+            # if name not set, uri is used as the name of the hyperlink
+            $Name = $Uri
+        }
+
+        if ($null -ne $env:WSL_DISTRO_NAME) {
+            # wsl conversion if needed
+            $Uri = &wslpath -m $Uri
+        }
+
+        # return an ANSI formatted hyperlink
+        return "`e]8;;file://$Uri`e\$Name`e]8;;`e\"
     }
 
     function Set-TransientPrompt {
         $previousOutputEncoding = [Console]::OutputEncoding
-        $executingCommand = $false
-
         try {
-            $parseErrors = $null
-            [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$null, [ref]$null, [ref]$parseErrors, [ref]$null)
-            if ($parseErrors.Count -eq 0) {
-                $executingCommand = $true
-                $script:TransientPrompt = $true
-                [Console]::OutputEncoding = [Text.Encoding]::UTF8
-                [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
-            }
-        }
-        finally {
-            # If PSReadline is set to display suggestion list, this workaround is needed to clear the buffer below
-            # before accepting the current commandline. The max amount of items in the list is 10, so 12 lines
-            # are cleared (10 + 1 more for the prompt + 1 more for current commandline).
-            if ((Get-PSReadLineOption).PredictionViewStyle -eq 'ListView') {
-                $terminalHeight = $Host.UI.RawUI.WindowSize.Height
-                # only do this on an valid value
-                if ([int]$terminalHeight -gt 0) {
-                    [Microsoft.PowerShell.PSConsoleReadLine]::Insert("`n" * [System.Math]::Min($terminalHeight - $Host.UI.RawUI.CursorPosition.Y - 1, 12))
-                    [Microsoft.PowerShell.PSConsoleReadLine]::Undo()
-                }
-            }
+            $script:TransientPrompt = $true
+            [Console]::OutputEncoding = [Text.Encoding]::UTF8
+            [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
+        } finally {
             [Console]::OutputEncoding = $previousOutputEncoding
         }
-
-        return $executingCommand
     }
 
-    if (("::TRANSIENT::" -eq "true") -and ($ExecutionContext.SessionState.LanguageMode -ne "ConstrainedLanguage")) {
+    function Set-PoshPromptType {
+        if ($script:TransientPrompt -eq $true) {
+            $script:PromptType = "transient"
+            $script:TransientPrompt = $false
+            return
+        }
+
+        # for details about the trick to detect a debugging context, see these comments:
+        # 1) https://github.com/JanDeDobbeleer/oh-my-posh/issues/2483#issuecomment-1175761456
+        # 2) https://github.com/JanDeDobbeleer/oh-my-posh/issues/2502#issuecomment-1179968052
+        # 3) https://github.com/JanDeDobbeleer/oh-my-posh/issues/5153
+        if ($Host.Runspace.Debugger.InBreakpoint) {
+            $script:PromptType = "debug"
+            return
+        }
+
+        $script:PromptType = "primary"
+
+        if ($global:_ompJobCount) {
+            $script:JobCount = (Get-Job -State Running).Count
+        }
+
+        if ($global:_ompAzure) {
+            try {
+                $env:POSH_AZURE_SUBSCRIPTION = Get-AzContext | ConvertTo-Json
+            } catch {}
+        }
+
+        if ($global:_ompPoshGit) {
+            try {
+                $global:GitStatus = Get-GitStatus
+                $env:POSH_GIT_STATUS = $global:GitStatus | ConvertTo-Json
+            } catch {}
+        }
+    }
+
+    function Update-PoshErrorCode {
+        $lastHistory = Get-History -ErrorAction Ignore -Count 1
+
+        # error code should be updated only when a non-empty command is run
+        if (($null -eq $lastHistory) -or ($script:LastHistoryId -eq $lastHistory.Id)) {
+            $script:ExecutionTime = 0
+            $script:NoExitCode = $true
+            return
+        }
+
+        $script:NoExitCode = $false
+        $script:LastHistoryId = $lastHistory.Id
+        $script:ExecutionTime = ($lastHistory.EndExecutionTime - $lastHistory.StartExecutionTime).TotalMilliseconds
+        if ($script:OriginalLastExecutionStatus) {
+            $script:ErrorCode = 0
+            return
+        }
+
+        $invocationInfo = try {
+            # retrieve info of the most recent error
+            $global:Error[0] | Where-Object { $_ -ne $null } | Select-Object -ExpandProperty InvocationInfo
+        } catch { $null }
+
+        # check if the last command caused the last error
+        if ($null -ne $invocationInfo -and $lastHistory.CommandLine -eq $invocationInfo.Line) {
+            $script:ErrorCode = 1
+            return
+        }
+
+        if ($script:OriginalLastExitCode -is [int] -and $script:OriginalLastExitCode -ne 0) {
+            # native app exit code
+            $script:ErrorCode = $script:OriginalLastExitCode
+            return
+        }
+    }
+
+    function Get-PoshPrompt {
+        param(
+            [string]$Type,
+            [string[]]$Arguments
+        )
+        $nonFSWD = Get-NonFSWD
+        $stackCount = Get-PoshStackCount
+        $terminalWidth = Get-TerminalWidth
+        Invoke-Utf8Posh @(
+            "print", $Type
+            "--save-cache"
+            "--shell=$script:ShellName"
+            "--shell-version=$script:PSVersion"
+            "--status=$script:ErrorCode"
+            "--no-status=$script:NoExitCode"
+            "--execution-time=$script:ExecutionTime"
+            "--pswd=$nonFSWD"
+            "--stack-count=$stackCount"
+            "--terminal-width=$terminalWidth"
+            "--job-count=$script:JobCount"
+            if ($Arguments) { $Arguments }
+        )
+    }
+
+    $promptFunction = {
+        # store the orignal last command execution status
+        if ($global:NVS_ORIGINAL_LASTEXECUTIONSTATUS -is [bool]) {
+            # make it compatible with NVS auto-switching, if enabled
+            $script:OriginalLastExecutionStatus = $global:NVS_ORIGINAL_LASTEXECUTIONSTATUS
+        } else {
+            $script:OriginalLastExecutionStatus = $?
+        }
+        # store the orignal last exit code
+        $script:OriginalLastExitCode = $global:LASTEXITCODE
+
+        Set-PoshPromptType
+
+        if ($script:PromptType -ne 'transient') {
+            Update-PoshErrorCode
+        }
+
+        Set-PoshContext $script:ErrorCode
+
+        # set the cursor positions, they are zero based so align with other platforms
+        $env:POSH_CURSOR_LINE = $Host.UI.RawUI.CursorPosition.Y + 1
+        $env:POSH_CURSOR_COLUMN = $Host.UI.RawUI.CursorPosition.X + 1
+
+        $output = Get-PoshPrompt $script:PromptType
+        # make sure PSReadLine knows if we have a multiline prompt
+        Set-PSReadLineOption -ExtraPromptLineCount (($output | Measure-Object -Line).Lines - 1)
+
+        # The output can be multi-line, joining them ensures proper rendering.
+        $output = $output -join "`n"
+
+        if ($script:PromptType -eq 'transient') {
+            # Workaround to prevent a command from eating the tail of a transient prompt, when we're at the end of the line.
+            $command = ''
+            [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$command, [ref]$null)
+            if ($command) {
+                $output += "  `b`b"
+            }
+        }
+
+        $output
+
+        # remove any posh-git status
+        $env:POSH_GIT_STATUS = $null
+
+        # restore the orignal last exit code
+        $global:LASTEXITCODE = $script:OriginalLastExitCode
+    }
+
+    $Function:prompt = $promptFunction
+
+    # set secondary prompt
+    Set-PSReadLineOption -ContinuationPrompt ((Invoke-Utf8Posh @("print", "secondary", "--shell=$script:ShellName")) -join "`n")
+
+    ### Exported Functions ###
+
+    function Set-PoshContext([bool]$originalStatus) {}
+
+    function Enable-PoshTooltips {
+        if ($script:ConstrainedLanguageMode) {
+            return
+        }
+
+        Set-PSReadLineKeyHandler -Key Spacebar -BriefDescription 'OhMyPoshSpaceKeyHandler' -ScriptBlock {
+            param([ConsoleKeyInfo]$key)
+            [Microsoft.PowerShell.PSConsoleReadLine]::SelfInsert($key)
+            try {
+                $command = ''
+                [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$command, [ref]$null)
+                # Get the first word of command line as tip.
+                $command = $command.TrimStart().Split(' ', 2) | Select-Object -First 1
+
+                # Ignore an empty/repeated tooltip command.
+                if (!$command -or ($command -eq $script:TooltipCommand)) {
+                    return
+                }
+
+                $script:TooltipCommand = $command
+
+                $output = (Get-PoshPrompt "tooltip" @(
+                        "--column=$($Host.UI.RawUI.CursorPosition.X)"
+                        "--command=$command"
+                    )) -join ''
+                if (!$output) {
+                    return
+                }
+
+                Write-Host $output -NoNewline
+
+                # Workaround to prevent the text after cursor from disappearing when the tooltip is printed.
+                [Microsoft.PowerShell.PSConsoleReadLine]::Insert(' ')
+                [Microsoft.PowerShell.PSConsoleReadLine]::Undo()
+            } finally {}
+        }
+    }
+
+    function Enable-PoshTransientPrompt {
+        if ($script:ConstrainedLanguageMode) {
+            return
+        }
+
         Set-PSReadLineKeyHandler -Key Enter -BriefDescription 'OhMyPoshEnterKeyHandler' -ScriptBlock {
-            $executingCommand = Set-TransientPrompt
-            [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()
-            # Write FTCS_COMMAND_EXECUTED after accepting the input - it should still happen before execution
-            if (("::FTCS_MARKS::" -eq "true") -and $executingCommand) {
-                Write-Host "$([char]0x1b)]133;C`a" -NoNewline
-            }
-        }
-        Set-PSReadLineKeyHandler -Key Ctrl+c -BriefDescription 'OhMyPoshCtrlCKeyHandler' -ScriptBlock {
-            $start = $null
-            [Microsoft.PowerShell.PSConsoleReadLine]::GetSelectionState([ref]$start, [ref]$null)
-            # only render a transient prompt when no text is selected
-            if ($start -eq -1) {
-                Set-TransientPrompt
-            }
-            [Microsoft.PowerShell.PSConsoleReadLine]::CopyOrCancelLine()
-        }
-    }
-
-    if (("::FTCS_MARKS::" -eq "true") -and ("::TRANSIENT::" -ne "true") -and ($ExecutionContext.SessionState.LanguageMode -ne "ConstrainedLanguage")) {
-        Set-PSReadLineKeyHandler -Key Enter  -BriefDescription 'OhMyPoshEnterKeyHandler' -ScriptBlock {
-            $executingCommand = $false
             try {
                 $parseErrors = $null
                 [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$null, [ref]$null, [ref]$parseErrors, [ref]$null)
                 $executingCommand = $parseErrors.Count -eq 0
+                if ($executingCommand) {
+                    $script:TooltipCommand = ''
+                    Set-TransientPrompt
+                }
+            } finally {
+                [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()
+                if ($global:_ompFTCSMarks -and $executingCommand) {
+                    # Write FTCS_COMMAND_EXECUTED after accepting the input - it should still happen before execution
+                    Write-Host "$([char]0x1b)]133;C`a" -NoNewline
+                }
             }
-            finally {}
-            [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()
-            # Write FTCS_COMMAND_EXECUTED after accepting the input - it should still happen before execution
-            if ($executingCommand) {
-                Write-Host "$([char]0x1b)]133;C`a" -NoNewline
+        }
+
+        Set-PSReadLineKeyHandler -Key Ctrl+c -BriefDescription 'OhMyPoshCtrlCKeyHandler' -ScriptBlock {
+            try {
+                $start = $null
+                [Microsoft.PowerShell.PSConsoleReadLine]::GetSelectionState([ref]$start, [ref]$null)
+                # only render a transient prompt when no text is selected
+                if ($start -eq -1) {
+                    $script:TooltipCommand = ''
+                    Set-TransientPrompt
+                }
+            } finally {
+                [Microsoft.PowerShell.PSConsoleReadLine]::CopyOrCancelLine()
             }
         }
     }
 
-    if ("::ERROR_LINE::" -eq "true") {
-        $validLine = @(Start-Utf8Process $script:OMPExecutable @("print", "valid", "--config=$env:POSH_THEME", "--shell=$script:ShellName")) -join "`n"
-        $errorLine = @(Start-Utf8Process $script:OMPExecutable @("print", "error", "--config=$env:POSH_THEME", "--shell=$script:ShellName")) -join "`n"
+    function Enable-PoshLineError {
+        $validLine = (Invoke-Utf8Posh @("print", "valid", "--shell=$script:ShellName")) -join "`n"
+        $errorLine = (Invoke-Utf8Posh @("print", "error", "--shell=$script:ShellName")) -join "`n"
         Set-PSReadLineOption -PromptText $validLine, $errorLine
     }
 
@@ -258,37 +428,24 @@ New-Module -Name "oh-my-posh-core" -ScriptBlock {
             $Format = 'json'
         )
 
-        $configString = @(Start-Utf8Process $script:OMPExecutable @("config", "export", "--config=$env:POSH_THEME", "--format=$Format"))
-        # if no path, copy to clipboard by default
-        if ('' -ne $FilePath) {
+        if ($FilePath) {
             # https://stackoverflow.com/questions/3038337/powershell-resolve-path-that-might-not-exist
             $FilePath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($FilePath)
-            [IO.File]::WriteAllLines($FilePath, $configString)
         }
-        else {
-            Set-Clipboard $configString
-            Write-Output "Theme copied to clipboard"
-        }
-    }
 
-    function Get-FileHyperlink {
-        param(
-            [Parameter(Mandatory, ValuefromPipeline = $True)]
-            [string]$uri,
-            [Parameter(ValuefromPipeline = $True)]
-            [string]$name
+        $output = Invoke-Utf8Posh @(
+            "config", "export"
+            "--format=$Format"
+            "--output=$FilePath"
         )
-        $esc = [char]27
-        if ("" -eq $name) {
-            # if name not set, uri is used as the name of the hyperlink
-            $name = $uri
+        if (!$output) {
+            Write-Host "Theme exported to $(Get-FileHyperlink $FilePath)."
+            return
         }
-        if ($null -ne $env:WSL_DISTRO_NAME) {
-            # wsl conversion if needed
-            $uri = &wslpath -m $uri
-        }
-        # return an ANSI formatted hyperlink
-        return "$esc]8;;file://$uri$esc\$name$esc]8;;$esc\"
+
+        # When no path is provided, copy the output to clipboard.
+        Set-Clipboard $output
+        Write-Host 'Theme copied to clipboard.'
     }
 
     function Get-PoshThemes {
@@ -301,13 +458,11 @@ New-Module -Name "oh-my-posh-core" -ScriptBlock {
             $List
         )
 
-        if ($Path -eq "") {
-            do {
-                $temp = Read-Host 'Please enter the themes path'
-            }
-            while (-not (Test-Path -LiteralPath $temp))
-            $Path = (Resolve-Path -Path $temp).ProviderPath
+        while (-not (Test-Path -LiteralPath $Path)) {
+            $Path = Read-Host 'Please enter the themes path'
         }
+
+        $Path = (Resolve-Path -Path $Path).ProviderPath
 
         $logo = @'
    __  _____ _      ___  ___       ______         _      __
@@ -322,19 +477,28 @@ New-Module -Name "oh-my-posh-core" -ScriptBlock {
         Write-Host $logo
         $themes = Get-ChildItem -Path "$Path/*" -Include '*.omp.json' | Sort-Object Name
         if ($List -eq $true) {
-            $themes | Select-Object @{ Name = 'hyperlink'; Expression = { Get-FileHyperlink -uri $_.FullName } } | Format-Table -HideTableHeaders
-        }
-        else {
-            $cleanPSWD = Get-CleanPSWD
+            $themes | Select-Object @{ Name = 'hyperlink'; Expression = { Get-FileHyperlink -Uri $_.FullName } } | Format-Table -HideTableHeaders
+        } else {
+            $nonFSWD = Get-NonFSWD
+            $stackCount = Get-PoshStackCount
+            $terminalWidth = Get-TerminalWidth
             $themes | ForEach-Object -Process {
-                Write-Host "Theme: $(Get-FileHyperlink -uri $_.FullName -Name ($_.BaseName -replace '\.omp$', ''))`n"
-                @(Start-Utf8Process $script:OMPExecutable @("print", "primary", "--config=$($_.FullName)", "--pswd=$cleanPSWD", "--shell=$script:ShellName"))
+                Write-Host "Theme: $(Get-FileHyperlink -Uri $_.FullName -Name ($_.BaseName -replace '\.omp$', ''))`n"
+                Invoke-Utf8Posh @(
+                    "print", "primary"
+                    "--config=$($_.FullName)"
+                    "--shell=$script:ShellName"
+                    "--shell-version=$script:PSVersion"
+                    "--pswd=$nonFSWD"
+                    "--stack-count=$stackCount"
+                    "--terminal-width=$terminalWidth"
+                )
                 Write-Host "`n"
             }
         }
         Write-Host @"
 
-Themes location: $(Get-FileHyperlink -uri "$Path")
+Themes location: $(Get-FileHyperlink -Uri "$Path")
 
 To change your theme, adjust the init script in $PROFILE.
 Example:
@@ -343,133 +507,27 @@ Example:
 "@
     }
 
-    function Set-PoshPromptType {
-        if ($script:TransientPrompt -eq $true) {
-            $script:PromptType = "transient"
-            $script:TransientPrompt = $false
-            return
-        }
-        # for details about the trick to detect a debugging context, see these comments:
-        # 1) https://github.com/JanDeDobbeleer/oh-my-posh/issues/2483#issuecomment-1175761456
-        # 2) https://github.com/JanDeDobbeleer/oh-my-posh/issues/2502#issuecomment-1179968052
-        if ($null -ne $PSDebugContext -or -not ((Get-PSCallStack).Location -join "").StartsWith("<")) {
-            $script:PromptType = "debug"
-            return
-        }
-        $script:PromptType = "primary"
-        Initialize-ModuleSupport
-    }
-
-    function Update-PoshErrorCode {
-        $lastHistory = Get-History -ErrorAction Ignore -Count 1
-        # error code should be updated only when a non-empty command is run
-        if (($null -eq $lastHistory) -or ($script:LastHistoryId -eq $lastHistory.Id)) {
-            $script:ExecutionTime = 0
-            $script:NoExitCode = $true
-            return
-        }
-        $script:NoExitCode = $false
-        $script:LastHistoryId = $lastHistory.Id
-        $script:ExecutionTime = ($lastHistory.EndExecutionTime - $lastHistory.StartExecutionTime).TotalMilliseconds
-        if ($script:OriginalLastExecutionStatus) {
-            $script:ErrorCode = 0
-            return
-        }
-        $invocationInfo = try {
-            # retrieve info of the most recent error
-            $global:Error[0] | Where-Object { $_ -ne $null } | Select-Object -ExpandProperty InvocationInfo
-        }
-        catch { $null }
-        # check if the last command caused the last error
-        if ($null -ne $invocationInfo -and $lastHistory.CommandLine -eq $invocationInfo.Line) {
-            $script:ErrorCode = 1
-            return
-        }
-        if ($script:OriginalLastExitCode -is [int] -and $script:OriginalLastExitCode -ne 0) {
-            # native app exit code
-            $script:ErrorCode = $script:OriginalLastExitCode
-            return
-        }
-    }
-
-    function prompt {
-        # store the orignal last command execution status
-        if ($global:NVS_ORIGINAL_LASTEXECUTIONSTATUS -is [bool]) {
-            # make it compatible with NVS auto-switching, if enabled
-            $script:OriginalLastExecutionStatus = $global:NVS_ORIGINAL_LASTEXECUTIONSTATUS
-        }
-        else {
-            $script:OriginalLastExecutionStatus = $?
-        }
-        # store the orignal last exit code
-        $script:OriginalLastExitCode = $global:LASTEXITCODE
-
-        Set-PoshPromptType
-        if ($script:PromptType -ne 'transient') {
-            Update-PoshErrorCode
-        }
-        $cleanPSWD = Get-CleanPSWD
-        $stackCount = global:Get-PoshStackCount
-        Set-PoshContext
-        $terminalWidth = $Host.UI.RawUI.WindowSize.Width
-        # set a sane default when the value can't be retrieved
-        if (-not $terminalWidth) {
-            $terminalWidth = 0
-        }
-
-        # in some cases we have an empty $script:NoExitCode
-        # this is a workaround to make sure we always have a value
-        # see https://github.com/JanDeDobbeleer/oh-my-posh/issues/4128
-        if ($null -eq $script:NoExitCode) {
-            $script:NoExitCode = $true
-        }
-
-        # set the cursor positions, they are zero based so align with other platforms
-        $env:POSH_CURSOR_LINE = $Host.UI.RawUI.CursorPosition.Y + 1
-        $env:POSH_CURSOR_COLUMN = $Host.UI.RawUI.CursorPosition.X + 1
-
-        $standardOut = @(Start-Utf8Process $script:OMPExecutable @("print", $script:PromptType, "--status=$script:ErrorCode", "--pswd=$cleanPSWD", "--execution-time=$script:ExecutionTime", "--stack-count=$stackCount", "--config=$env:POSH_THEME", "--shell-version=$script:PSVersion", "--terminal-width=$terminalWidth", "--shell=$script:ShellName", "--no-status=$script:NoExitCode"))
-        # make sure PSReadLine knows if we have a multiline prompt
-        Set-PSReadLineOption -ExtraPromptLineCount (($standardOut | Measure-Object -Line).Lines - 1)
-        # the output can be multiline, joining these ensures proper rendering by adding line breaks with `n
-        $standardOut -join "`n"
-
-        # remove any posh-git status
-        $env:POSH_GIT_STATUS = $null
-
-        # remove cached tip command
-        $script:ToolTipCommand = ""
-
-        # restore the orignal last exit code
-        $global:LASTEXITCODE = $script:OriginalLastExitCode
-    }
-
-    # set secondary prompt
-    Set-PSReadLineOption -ContinuationPrompt (@(Start-Utf8Process $script:OMPExecutable @("print", "secondary", "--config=$env:POSH_THEME", "--shell=$script:ShellName")) -join "`n")
-
-    # legacy functions
-    function Enable-PoshTooltips {}
-    function Enable-PoshTransientPrompt {}
-    function Enable-PoshLineError {}
-
     # perform cleanup on removal so a new initialization in current session works
-    if ($ExecutionContext.SessionState.LanguageMode -ne "ConstrainedLanguage") {
+    if (!$script:ConstrainedLanguageMode) {
         $ExecutionContext.SessionState.Module.OnRemove += {
-            if ((Get-PSReadLineKeyHandler -Key Spacebar).Function -eq 'OhMyPoshSpaceKeyHandler') {
-                Remove-PSReadLineKeyHandler -Key Spacebar
+            Remove-Item Function:Get-PoshStackCount
+            $Function:prompt = $script:OriginalPromptFunction
+
+            (Get-PSReadLineOption).ContinuationPrompt = $script:OriginalContinuationPrompt
+            (Get-PSReadLineOption).PromptText = $script:OriginalPromptText
+
+            if ((Get-PSReadLineKeyHandler Spacebar).Function -eq 'OhMyPoshSpaceKeyHandler') {
+                Remove-PSReadLineKeyHandler Spacebar
             }
-            if ((Get-PSReadLineKeyHandler -Key Enter).Function -eq 'OhMyPoshEnterKeyHandler') {
-                Set-PSReadLineKeyHandler -Key Enter -Function AcceptLine
+
+            if ((Get-PSReadLineKeyHandler Enter).Function -eq 'OhMyPoshEnterKeyHandler') {
+                Set-PSReadLineKeyHandler Enter -Function AcceptLine
             }
-            if ((Get-PSReadLineKeyHandler -Key Ctrl+c).Function -eq 'OhMyPoshCtrlCKeyHandler') {
-                Set-PSReadLineKeyHandler -Key Ctrl+c -Function CopyOrCancelLine
+
+            if ((Get-PSReadLineKeyHandler Ctrl+c).Function -eq 'OhMyPoshCtrlCKeyHandler') {
+                Set-PSReadLineKeyHandler Ctrl+c -Function CopyOrCancelLine
             }
         }
-    }
-
-    $notice = @(Start-Utf8Process $script:OMPExecutable @("notice"))
-    if ($notice) {
-        Write-Host $notice -NoNewline
     }
 
     Export-ModuleMember -Function @(

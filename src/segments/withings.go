@@ -8,18 +8,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/http"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/http"
 
-	http2 "net/http"
+	httplib "net/http"
 	"net/url"
 )
 
 // WithingsData struct contains the API data
 type WithingsData struct {
-	Status int   `json:"status"`
 	Body   *Body `json:"body"`
+	Status int   `json:"status"`
 }
 
 type Body struct {
@@ -29,8 +28,8 @@ type Body struct {
 }
 
 type MeasureGroup struct {
-	Measures []*Measure  `json:"measures"`
-	Comment  interface{} `json:"comment"`
+	Comment  any        `json:"comment"`
+	Measures []*Measure `json:"measures"`
 }
 
 type Measure struct {
@@ -120,26 +119,28 @@ func (w *withingsAPI) GetSleep() (*WithingsData, error) {
 }
 
 func (w *withingsAPI) getWithingsData(endpoint string, formData url.Values) (*WithingsData, error) {
-	modifiers := func(request *http2.Request) {
-		request.Method = http2.MethodPost
+	modifiers := func(request *httplib.Request) {
+		request.Method = httplib.MethodPost
 		request.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	}
+
 	body := strings.NewReader(formData.Encode())
+
 	data, err := http.OauthResult[*WithingsData](w.OAuthRequest, endpoint, body, modifiers)
 	if data != nil && data.Status != 0 {
 		return nil, errors.New("Withings API error: " + strconv.Itoa(data.Status))
 	}
+
 	return data, err
 }
 
 type Withings struct {
-	props properties.Properties
+	base
 
-	Weight     float64
+	api        WithingsAPI
 	SleepHours string
+	Weight     float64
 	Steps      int
-
-	api WithingsAPI
 }
 
 const (
@@ -152,6 +153,8 @@ func (w *Withings) Template() string {
 }
 
 func (w *Withings) Enabled() bool {
+	w.initAPI()
+
 	var enabled bool
 	if w.getActivities() {
 		enabled = true
@@ -163,6 +166,28 @@ func (w *Withings) Enabled() bool {
 		enabled = true
 	}
 	return enabled
+}
+
+func (w *Withings) initAPI() {
+	if w.api != nil {
+		return
+	}
+
+	oauth := &http.OAuthRequest{
+		AccessTokenKey:  WithingsAccessTokenKey,
+		RefreshTokenKey: WithingsRefreshTokenKey,
+		SegmentName:     "withings",
+		AccessToken:     w.props.GetString(properties.AccessToken, ""),
+		RefreshToken:    w.props.GetString(properties.RefreshToken, ""),
+		Request: http.Request{
+			Env:         w.env,
+			HTTPTimeout: w.props.GetInt(properties.HTTPTimeout, properties.DefaultHTTPTimeout),
+		},
+	}
+
+	w.api = &withingsAPI{
+		OAuthRequest: oauth,
+	}
 }
 
 func (w *Withings) getMeasures() bool {
@@ -207,27 +232,15 @@ func (w *Withings) getSleep() bool {
 		if sleepStart.IsZero() || start.Before(sleepStart) {
 			sleepStart = start
 		}
+
 		end := time.Unix(series.Enddate, 0)
 		if sleepStart.IsZero() || start.After(sleepEnd) {
 			sleepEnd = end
 		}
 	}
+
 	sleepHours := sleepEnd.Sub(sleepStart).Hours()
 	w.SleepHours = fmt.Sprintf("%0.1f", sleepHours)
+
 	return true
-}
-
-func (w *Withings) Init(props properties.Properties, env platform.Environment) {
-	w.props = props
-
-	oauth := &http.OAuthRequest{
-		AccessTokenKey:  WithingsAccessTokenKey,
-		RefreshTokenKey: WithingsRefreshTokenKey,
-		SegmentName:     "withings",
-	}
-	oauth.Init(env, props)
-
-	w.api = &withingsAPI{
-		OAuthRequest: oauth,
-	}
 }

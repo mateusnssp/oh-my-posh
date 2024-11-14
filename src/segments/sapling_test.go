@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/alecthomas/assert"
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 )
 
 func TestSetDir(t *testing.T) {
@@ -18,43 +18,30 @@ func TestSetDir(t *testing.T) {
 		GOOS     string
 	}{
 		{
-			Case:     "In home folder",
-			Expected: "~/sapling",
-			Path:     "/usr/home/sapling/.sl",
-			GOOS:     platform.LINUX,
-		},
-		{
-			Case:     "Outside home folder",
+			Case:     "Linux",
 			Expected: "/usr/sapling/repo",
 			Path:     "/usr/sapling/repo/.sl",
-			GOOS:     platform.LINUX,
+			GOOS:     runtime.LINUX,
 		},
 		{
-			Case:     "Windows home folder",
-			Expected: "~\\sapling",
-			Path:     "\\usr\\home\\sapling\\.sl",
-			GOOS:     platform.WINDOWS,
-		},
-		{
-			Case:     "Windows outside home folder",
+			Case:     "Windows",
 			Expected: "\\usr\\sapling\\repo",
 			Path:     "\\usr\\sapling\\repo\\.sl",
-			GOOS:     platform.WINDOWS,
+			GOOS:     runtime.WINDOWS,
 		},
 	}
 	for _, tc := range cases {
-		env := new(mock.MockedEnvironment)
+		env := new(mock.Environment)
 		env.On("GOOS").Return(tc.GOOS)
 		home := "/usr/home"
-		if tc.GOOS == platform.WINDOWS {
+		if tc.GOOS == runtime.WINDOWS {
 			home = "\\usr\\home"
 		}
 		env.On("Home").Return(home)
-		sl := &Sapling{
-			scm: scm{
-				env: env,
-			},
-		}
+
+		sl := &Sapling{}
+		sl.Init(properties.Map{}, env)
+
 		sl.setDir(tc.Path)
 		assert.Equal(t, tc.Expected, sl.Dir, tc.Case)
 	}
@@ -100,15 +87,18 @@ func TestSetCommitContext(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		env := new(mock.MockedEnvironment)
+		env := new(mock.Environment)
 		env.On("RunCommand", "sl", []string{"log", "--limit", "1", "--template", SLCOMMITTEMPLATE}).Return(tc.Output, tc.Error)
+
 		sl := &Sapling{
 			scm: scm{
-				env:     env,
 				command: SAPLINGCOMMAND,
 			},
 		}
+		sl.Init(properties.Map{}, env)
+
 		sl.setCommitContext()
+
 		assert.Equal(t, tc.ExpectedHash, sl.Hash, tc.Case)
 		assert.Equal(t, tc.ExpectedShortHash, sl.ShortHash, tc.Case)
 		assert.Equal(t, tc.ExpectedWhen, sl.When, tc.Case)
@@ -123,7 +113,6 @@ func TestShouldDisplay(t *testing.T) {
 		HasSapling bool
 		InRepo     bool
 		Expected   bool
-		Excluded   bool
 	}{
 		{
 			Case: "Sapling not installed",
@@ -133,43 +122,32 @@ func TestShouldDisplay(t *testing.T) {
 			HasSapling: true,
 		},
 		{
-			Case:       "Sapling installed, in repo but ignored",
-			HasSapling: true,
-			InRepo:     true,
-			Excluded:   true,
-		},
-		{
 			Case:       "Sapling installed, in repo",
 			HasSapling: true,
 			InRepo:     true,
 			Expected:   true,
 		},
 	}
-	fileInfo := &platform.FileInfo{
+	fileInfo := &runtime.FileInfo{
 		Path:         "/sapling/repo/.sl",
 		ParentFolder: "/sapling/repo",
 		IsDir:        true,
 	}
 	for _, tc := range cases {
-		env := new(mock.MockedEnvironment)
+		env := new(mock.Environment)
 		env.On("HasCommand", "sl").Return(tc.HasSapling)
 		env.On("InWSLSharedDrive").Return(false)
-		env.On("GOOS").Return(platform.LINUX)
+		env.On("GOOS").Return(runtime.LINUX)
 		env.On("Home").Return("/usr/home/sapling")
-		env.On("DirMatchesOneOf", fileInfo.ParentFolder, []string{"/sapling/repo"}).Return(tc.Excluded)
 		if tc.InRepo {
-			env.On("HasParentFilePath", ".sl").Return(fileInfo, nil)
+			env.On("HasParentFilePath", ".sl", false).Return(fileInfo, nil)
 		} else {
-			env.On("HasParentFilePath", ".sl").Return(&platform.FileInfo{}, errors.New("error"))
+			env.On("HasParentFilePath", ".sl", false).Return(&runtime.FileInfo{}, errors.New("error"))
 		}
-		sl := &Sapling{
-			scm: scm{
-				env: env,
-				props: &properties.Map{
-					properties.ExcludeFolders: []string{"/sapling/repo"},
-				},
-			},
-		}
+
+		sl := &Sapling{}
+		sl.Init(&properties.Map{}, env)
+
 		got := sl.shouldDisplay()
 		assert.Equal(t, tc.Expected, got, tc.Case)
 		if tc.Expected {
@@ -184,9 +162,9 @@ func TestShouldDisplay(t *testing.T) {
 func TestSetHeadContext(t *testing.T) {
 	cases := []struct {
 		Case        string
-		FetchStatus bool
 		Output      string
 		Expected    string
+		FetchStatus bool
 	}{
 		{
 			Case: "Do not fetch status",
@@ -229,18 +207,21 @@ func TestSetHeadContext(t *testing.T) {
 	bm:sapling-segment
 	`
 	for _, tc := range cases {
-		env := new(mock.MockedEnvironment)
+		env := new(mock.Environment)
 		env.On("RunCommand", "sl", []string{"log", "--limit", "1", "--template", SLCOMMITTEMPLATE}).Return(output, nil)
 		env.On("RunCommand", "sl", []string{"status"}).Return(tc.Output, nil)
+
+		props := &properties.Map{
+			FetchStatus: tc.FetchStatus,
+		}
+
 		sl := &Sapling{
 			scm: scm{
-				env: env,
-				props: &properties.Map{
-					FetchStatus: tc.FetchStatus,
-				},
 				command: SAPLINGCOMMAND,
 			},
 		}
+		sl.Init(props, env)
+
 		sl.setHeadContext()
 		got := sl.Working.String()
 		assert.Equal(t, tc.Expected, got, tc.Case)

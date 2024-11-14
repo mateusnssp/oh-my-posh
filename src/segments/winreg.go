@@ -1,13 +1,12 @@
 package segments
 
 import (
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 )
 
 type WindowsRegistry struct {
-	props properties.Properties
-	env   platform.Environment
+	base
 
 	Value string
 }
@@ -23,13 +22,8 @@ func (wr *WindowsRegistry) Template() string {
 	return " {{ .Value }} "
 }
 
-func (wr *WindowsRegistry) Init(props properties.Properties, env platform.Environment) {
-	wr.props = props
-	wr.env = env
-}
-
 func (wr *WindowsRegistry) Enabled() bool {
-	if wr.env.GOOS() != platform.WINDOWS {
+	if wr.env.GOOS() != runtime.WINDOWS {
 		return false
 	}
 

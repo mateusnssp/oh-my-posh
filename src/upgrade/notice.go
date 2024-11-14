@@ -6,51 +6,57 @@ import (
 	"time"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/build"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
+	"github.com/jandedobbeleer/oh-my-posh/src/cache"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/http"
 )
 
 type release struct {
-	URL             string    `json:"url"`
-	HTMLURL         string    `json:"html_url"`
-	AssetsURL       string    `json:"assets_url"`
-	UploadURL       string    `json:"upload_url"`
+	CreatedAt       time.Time `json:"created_at"`
+	PublishedAt     time.Time `json:"published_at"`
+	NodeID          string    `json:"node_id"`
+	TagName         string    `json:"tag_name"`
 	TarballURL      string    `json:"tarball_url"`
 	ZipballURL      string    `json:"zipball_url"`
 	DiscussionURL   string    `json:"discussion_url"`
-	ID              int       `json:"id"`
-	NodeID          string    `json:"node_id"`
-	TagName         string    `json:"tag_name"`
+	HTMLURL         string    `json:"html_url"`
+	URL             string    `json:"url"`
+	UploadURL       string    `json:"upload_url"`
 	TargetCommitish string    `json:"target_commitish"`
 	Name            string    `json:"name"`
 	Body            string    `json:"body"`
-	Draft           bool      `json:"draft"`
+	AssetsURL       string    `json:"assets_url"`
+	ID              int       `json:"id"`
 	Prerelease      bool      `json:"prerelease"`
-	CreatedAt       time.Time `json:"created_at"`
-	PublishedAt     time.Time `json:"published_at"`
+	Draft           bool      `json:"draft"`
 }
 
 const (
-	RELEASEURL    = "https://api.github.com/repos/jandedobbeleer/oh-my-posh/releases/latest"
+	RELEASEURL = "https://api.github.com/repos/jandedobbeleer/oh-my-posh/releases/latest"
+	CACHEKEY   = "upgrade_check"
+
 	upgradeNotice = `
 A new release of Oh My Posh is available: %s → %s
-%s
-`
-	windows = `To upgrade, use the guide for your favorite package manager in the documentation:
-https://ohmyposh.dev/docs/installation/windows#update`
-	unix   = "To upgrade, use your favorite package manager or, if you used Homebrew to install, run: 'brew update && brew upgrade oh-my-posh'"
-	darwin = "To upgrade, run: 'brew update && brew upgrade oh-my-posh'"
+To upgrade, run: 'oh-my-posh upgrade'
 
-	CACHEKEY = "upgrade_check"
+To enable automated upgrades, run: 'oh-my-posh enable autoupgrade'.
+`
 )
 
-func Latest(env platform.Environment) (string, error) {
-	body, err := env.HTTPRequest(RELEASEURL, nil, 1000)
+func Latest(env runtime.Environment) (string, error) {
+	body, err := env.HTTPRequest(RELEASEURL, nil, 5000)
 	if err != nil {
 		return "", err
 	}
+
 	var release release
 	// this can't fail
 	_ = json.Unmarshal(body, &release)
+
+	if len(release.TagName) == 0 {
+		return "", fmt.Errorf("failed to get latest release")
+	}
+
 	return release.TagName, nil
 }
 
@@ -58,13 +64,18 @@ func Latest(env platform.Environment) (string, error) {
 // that should be displayed to the user.
 //
 // The upgrade check is only performed every other week.
-func Notice(env platform.Environment) (string, bool) {
-	// never validate when we install using the Windows Store
-	if env.Getenv("POSH_INSTALLER") == "ws" {
+func Notice(env runtime.Environment, force bool) (string, bool) {
+	// do not check when last validation was < 1 week ago
+	if _, OK := env.Cache().Get(CACHEKEY); OK && !force {
 		return "", false
 	}
-	// do not check when last validation was < 1 week ago
-	if _, OK := env.Cache().Get(CACHEKEY); OK {
+
+	if !http.IsConnected() {
+		return "", false
+	}
+
+	// never validate when we install using the Windows Store
+	if env.Getenv("POSH_INSTALLER") == "ws" {
 		return "", false
 	}
 
@@ -73,23 +84,12 @@ func Notice(env platform.Environment) (string, bool) {
 		return "", false
 	}
 
-	oneWeek := 10080
-	env.Cache().Set(CACHEKEY, latest, oneWeek)
+	env.Cache().Set(CACHEKEY, latest, cache.ONEWEEK)
 
 	version := fmt.Sprintf("v%s", build.Version)
 	if latest == version {
 		return "", false
 	}
 
-	var notice string
-	switch env.GOOS() {
-	case platform.WINDOWS:
-		notice = windows
-	case platform.DARWIN:
-		notice = darwin
-	case platform.LINUX:
-		notice = unix
-	}
-
-	return fmt.Sprintf(upgradeNotice, version, latest, notice), true
+	return fmt.Sprintf(upgradeNotice, version, latest), true
 }

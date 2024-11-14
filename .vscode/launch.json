@@ -78,6 +78,17 @@
       ]
     },
     {
+      "name": "Export Config",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceRoot}/src",
+      "args": [
+        "config",
+        "export"
+      ]
+    },
+    {
       "name": "Export Image",
       "type": "go",
       "request": "launch",
@@ -135,6 +146,37 @@
       ]
     },
     {
+      "name": "Notice",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceRoot}/src",
+      "args": [
+        "notice"
+      ]
+    },
+    {
+      "name": "Upgrade",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceRoot}/src",
+      "args": [
+        "upgrade"
+      ]
+    },
+    {
+      "name": "Font install",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceRoot}/src",
+      "args": [
+        "font",
+        "install"
+      ]
+    },
+    {
       "type": "node",
       "request": "launch",
       "name": "Theme export",
@@ -161,13 +203,14 @@
       "envFile": "${workspaceFolder}/website/.env"
     },
     {
-      "name": "Cache",
+      "name": "Cache clear",
       "type": "go",
       "request": "launch",
       "mode": "debug",
       "program": "${workspaceRoot}/src",
       "args": [
-        "cache"
+        "cache",
+        "clear"
       ]
     }
   ]

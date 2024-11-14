@@ -1,119 +1,56 @@
 package template
 
 import (
-	"bytes"
-	"errors"
+	"fmt"
 	"reflect"
 	"strings"
-	"text/template"
+	"time"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
+	"github.com/jandedobbeleer/oh-my-posh/src/log"
 	"github.com/jandedobbeleer/oh-my-posh/src/regex"
 )
 
-const (
-	// Errors to show when the template handling fails
-	InvalidTemplate   = "invalid template text"
-	IncorrectTemplate = "unable to create text based on template"
-
-	globalRef = ".$"
-)
-
-var (
-	knownVariables = []string{
-		"Root",
-		"PWD",
-		"Folder",
-		"Shell",
-		"ShellVersion",
-		"UserName",
-		"HostName",
-		"Env",
-		"Data",
-		"Code",
-		"OS",
-		"WSL",
-		"Segments",
-		"Templates",
-		"PromptCount",
-		"Var",
-	}
-)
-
 type Text struct {
-	Template        string
-	Context         interface{}
-	Env             platform.Environment
-	TemplatesResult string
-}
-
-type Data interface{}
-
-type Context struct {
-	*platform.TemplateCache
-
-	// Simple container to hold ANY object
-	Data
-	Templates string
-}
-
-func (c *Context) init(t *Text) {
-	c.Data = t.Context
-	c.Templates = t.TemplatesResult
-	if cache := t.Env.TemplateCache(); cache != nil {
-		c.TemplateCache = cache
-		return
-	}
+	Context  Data
+	Template string
 }
 
 func (t *Text) Render() (string, error) {
-	t.Env.DebugF("Rendering template: %s", t.Template)
+	defer log.Trace(time.Now(), t.Template)
+
 	if !strings.Contains(t.Template, "{{") || !strings.Contains(t.Template, "}}") {
 		return t.Template, nil
 	}
-	t.cleanTemplate()
-	tmpl, err := template.New(t.Template).Funcs(funcMap()).Parse(t.Template)
-	if err != nil {
-		t.Env.Error(err)
-		return "", errors.New(InvalidTemplate)
-	}
-	context := &Context{}
-	context.init(t)
-	buffer := new(bytes.Buffer)
-	defer buffer.Reset()
-	err = tmpl.Execute(buffer, context)
-	if err != nil {
-		t.Env.Error(err)
-		msg := regex.FindNamedRegexMatch(`at (?P<MSG><.*)$`, err.Error())
-		if len(msg) == 0 {
-			return "", errors.New(IncorrectTemplate)
-		}
-		return "", errors.New(msg["MSG"])
-	}
-	text := buffer.String()
-	// issue with missingkey=zero ignored for map[string]interface{}
-	// https://github.com/golang/go/issues/24963
-	text = strings.ReplaceAll(text, "<no value>", "")
-	return text, nil
+
+	t.patchTemplate()
+
+	renderer := renderPool.Get().(*renderer)
+	defer renderer.release()
+
+	return renderer.execute(t)
 }
 
-func (t *Text) cleanTemplate() {
+func (t *Text) patchTemplate() {
 	isKnownVariable := func(variable string) bool {
 		variable = strings.TrimPrefix(variable, ".")
 		splitted := strings.Split(variable, ".")
+
 		if len(splitted) == 0 {
 			return true
 		}
+
 		variable = splitted[0]
 		// check if alphanumeric
 		if !regex.MatchString(`^[a-zA-Z0-9]+$`, variable) {
 			return true
 		}
+
 		for _, b := range knownVariables {
 			if variable == b {
 				return true
 			}
 		}
+
 		return false
 	}
 
@@ -157,26 +94,35 @@ func (t *Text) cleanTemplate() {
 				result += string(char)
 				continue
 			}
-			// end of a variable, needs to be appended
-			if !isKnownVariable(property) {
+
+			switch {
+			case !isKnownVariable(property):
+				// end of a variable, needs to be appended
 				result += ".Data" + property
-			} else if strings.HasPrefix(property, ".Segments") && !strings.HasSuffix(property, ".Contains") {
+			case strings.HasPrefix(property, ".Segments") && !strings.HasSuffix(property, ".Contains"):
 				// as we can't provide a clean way to access the list
 				// of segments, we need to replace the property with
 				// the list of segments so they can be accessed directly
-				property = strings.Replace(property, ".Segments", ".Segments.SimpleMap", 1)
+				property = strings.Replace(property, ".Segments", ".Segments.ToSimple", 1)
 				result += property
-			} else {
+			case strings.HasPrefix(property, ".Env."):
+				// we need to replace the property with the getEnv function
+				// so we can access the environment variables directly
+				property = strings.TrimPrefix(property, ".Env.")
+				result += fmt.Sprintf(`(call .Getenv "%s")`, property)
+			default:
 				// check if we have the same property in Data
 				// and replace it with the Data property so it
 				// can take precedence
 				if fields.hasField(property) {
 					property = ".Data" + property
 				}
+
 				// remove the global reference so we can use it directly
 				property = strings.TrimPrefix(property, globalRef)
 				result += property
 			}
+
 			property = ""
 			result += string(char)
 			inProperty = false
@@ -195,7 +141,7 @@ func (t *Text) cleanTemplate() {
 
 type fields map[string]bool
 
-func (f *fields) init(data interface{}) {
+func (f *fields) init(data any) {
 	if data == nil {
 		return
 	}
@@ -208,7 +154,7 @@ func (f *fields) init(data interface{}) {
 			(*f)[val.Field(i).Name] = true
 		}
 	case reflect.Map:
-		m, ok := data.(map[string]interface{})
+		m, ok := data.(map[string]any)
 		if !ok {
 			return
 		}

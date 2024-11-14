@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"path"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
+	"github.com/jandedobbeleer/oh-my-posh/src/log"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 )
 
@@ -16,8 +16,7 @@ const (
 )
 
 type Sitecore struct {
-	props properties.Properties
-	env   platform.Environment
+	base
 
 	EndpointName string
 	CmHost       string
@@ -28,18 +27,20 @@ type EndpointConfig struct {
 }
 
 type UserConfig struct {
-	DefaultEndpoint string                    `json:"defaultEndpoint"`
 	Endpoints       map[string]EndpointConfig `json:"endpoints"`
+	DefaultEndpoint string                    `json:"defaultEndpoint"`
 }
 
 func (s *Sitecore) Enabled() bool {
-	if !s.env.HasFiles(sitecoreFileName) || !s.env.HasFiles(path.Join(sitecoreFolderName, userFileName)) {
+	if !s.env.HasFiles(sitecoreFileName) || !s.env.HasFilesInDir(sitecoreFolderName, userFileName) {
+		log.Debug("sitecore cli configuration files were not found")
 		return false
 	}
 
 	var userConfig, err = getUserConfig(s)
 
 	if err != nil {
+		log.Error(err)
 		return false
 	}
 
@@ -48,6 +49,7 @@ func (s *Sitecore) Enabled() bool {
 	displayDefault := s.props.GetBool(properties.DisplayDefault, true)
 
 	if !displayDefault && s.EndpointName == defaultEnpointName {
+		log.Debug("displaying of the default environment is turned off")
 		return false
 	}
 
@@ -60,11 +62,6 @@ func (s *Sitecore) Enabled() bool {
 
 func (s *Sitecore) Template() string {
 	return "{{ .EndpointName }} {{ if .CmHost }}({{ .CmHost }}){{ end }}"
-}
-
-func (s *Sitecore) Init(props properties.Properties, env platform.Environment) {
-	s.props = props
-	s.env = env
 }
 
 func getUserConfig(s *Sitecore) (*UserConfig, error) {

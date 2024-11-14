@@ -3,7 +3,8 @@ package segments
 import (
 	"strings"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/path"
 )
 
 // SaplingStatus represents part of the status of a Sapling repository
@@ -44,17 +45,15 @@ const (
 )
 
 type Sapling struct {
-	scm
-
+	Working     *SaplingStatus
 	ShortHash   string
 	Hash        string
 	When        string
 	Author      string
 	Bookmark    string
 	Description string
-	New         bool
-
-	Working *SaplingStatus
+	scm
+	New bool
 }
 
 func (sl *Sapling) Template() string {
@@ -72,16 +71,14 @@ func (sl *Sapling) Enabled() bool {
 }
 
 func (sl *Sapling) shouldDisplay() bool {
+	sl.command = SAPLINGCOMMAND
+
 	if !sl.hasCommand(SAPLINGCOMMAND) {
 		return false
 	}
 
-	slDir, err := sl.env.HasParentFilePath(".sl")
+	slDir, err := sl.env.HasParentFilePath(".sl", false)
 	if err != nil {
-		return false
-	}
-
-	if sl.shouldIgnoreRootRepository(slDir.ParentFolder) {
 		return false
 	}
 
@@ -89,17 +86,29 @@ func (sl *Sapling) shouldDisplay() bool {
 	sl.rootDir = slDir.Path
 	// convert the worktree file path to a windows one when in a WSL shared folder
 	sl.realDir = strings.TrimSuffix(sl.convertToWindowsPath(slDir.Path), "/.sl")
-	sl.RepoName = platform.Base(sl.env, sl.convertToLinuxPath(sl.realDir))
+	sl.RepoName = path.Base(sl.convertToLinuxPath(sl.realDir))
 	sl.setDir(slDir.Path)
+
 	return true
 }
 
+func (sl *Sapling) CacheKey() (string, bool) {
+	dir, err := sl.env.HasParentFilePath(".sl", true)
+	if err != nil {
+		return "", false
+	}
+
+	return dir.Path, true
+}
+
 func (sl *Sapling) setDir(dir string) {
-	dir = platform.ReplaceHomeDirPrefixWithTilde(sl.env, dir) // align with template PWD
-	if sl.env.GOOS() == platform.WINDOWS {
+	dir = path.ReplaceHomeDirPrefixWithTilde(dir) // align with template PWD
+
+	if sl.env.GOOS() == runtime.WINDOWS {
 		sl.Dir = strings.TrimSuffix(dir, `\.sl`)
 		return
 	}
+
 	sl.Dir = strings.TrimSuffix(dir, "/.sl")
 }
 

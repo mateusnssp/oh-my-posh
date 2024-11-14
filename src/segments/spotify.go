@@ -1,13 +1,11 @@
 package segments
 
 import (
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 )
 
 type Spotify struct {
-	props properties.Properties
-	env   platform.Environment
+	base
 
 	MusicPlayer
 }
@@ -46,9 +44,4 @@ func (s *Spotify) resolveIcon() {
 	case playing:
 		s.Icon = s.props.GetString(PlayingIcon, "\uE602 ")
 	}
-}
-
-func (s *Spotify) Init(props properties.Properties, env platform.Environment) {
-	s.props = props
-	s.env = env
 }

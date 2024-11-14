@@ -3,9 +3,6 @@ package segments
 import (
 	"encoding/json"
 	"path/filepath"
-
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 )
 
 type DockerConfig struct {
@@ -13,19 +10,13 @@ type DockerConfig struct {
 }
 
 type Docker struct {
-	props properties.Properties
-	env   platform.Environment
+	base
 
 	Context string
 }
 
 func (d *Docker) Template() string {
 	return " \uf308 {{ .Context }} "
-}
-
-func (d *Docker) Init(props properties.Properties, env platform.Environment) {
-	d.props = props
-	d.env = env
 }
 
 func (d *Docker) envVars() []string {

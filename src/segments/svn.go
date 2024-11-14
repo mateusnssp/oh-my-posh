@@ -1,6 +1,7 @@
 package segments
 
 import (
+	"path"
 	"strconv"
 	"strings"
 
@@ -38,11 +39,10 @@ const (
 )
 
 type Svn struct {
-	scm
-
 	Working *SvnStatus
-	BaseRev int
 	Branch  string
+	scm
+	BaseRev int
 }
 
 func (s *Svn) Template() string {
@@ -59,17 +59,22 @@ func (s *Svn) Enabled() bool {
 	return true
 }
 
+func (s *Svn) CacheKey() (string, bool) {
+	dir, err := s.env.HasParentFilePath(".svn", true)
+	if err != nil {
+		return "", false
+	}
+
+	return dir.Path, true
+}
+
 func (s *Svn) shouldDisplay() bool {
 	if !s.hasCommand(SVNCOMMAND) {
 		return false
 	}
 
-	Svndir, err := s.env.HasParentFilePath(".svn")
+	Svndir, err := s.env.HasParentFilePath(".svn", false)
 	if err != nil {
-		return false
-	}
-
-	if s.shouldIgnoreRootRepository(Svndir.ParentFolder) {
 		return false
 	}
 
@@ -121,6 +126,18 @@ func (s *Svn) setSvnStatus() {
 		// element is the element from someSlice for where we are
 		s.Working.add(line[0:1])
 	}
+}
+
+func (s *Svn) Repo() string {
+	// Get the repository name as the last path element of the repository root URL
+	repo := s.getSvnCommandOutput("info", "--show-item", "repos-root-url")
+	base := path.Base(repo)
+
+	if base == "." {
+		return ""
+	}
+
+	return base
 }
 
 func (s *Svn) getSvnCommandOutput(command string, args ...string) string {

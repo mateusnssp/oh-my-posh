@@ -3,7 +3,8 @@ package segments
 import (
 	"strings"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/path"
 )
 
 const (
@@ -30,16 +31,15 @@ func (s *MercurialStatus) add(code string) {
 }
 
 type Mercurial struct {
-	scm
-
 	Working           *MercurialStatus
-	IsTip             bool
 	LocalCommitNumber string
 	ChangeSetID       string
 	ChangeSetIDShort  string
 	Branch            string
-	Bookmarks         []string
-	Tags              []string
+	scm
+	Bookmarks []string
+	Tags      []string
+	IsTip     bool
 }
 
 func (hg *Mercurial) Template() string {
@@ -62,17 +62,22 @@ func (hg *Mercurial) Enabled() bool {
 	return true
 }
 
+func (hg *Mercurial) CacheKey() (string, bool) {
+	dir, err := hg.env.HasParentFilePath(".hg", true)
+	if err != nil {
+		return "", false
+	}
+
+	return dir.Path, true
+}
+
 func (hg *Mercurial) shouldDisplay() bool {
 	if !hg.hasCommand(MERCURIALCOMMAND) {
 		return false
 	}
 
-	hgdir, err := hg.env.HasParentFilePath(".hg")
+	hgdir, err := hg.env.HasParentFilePath(".hg", false)
 	if err != nil {
-		return false
-	}
-
-	if hg.shouldIgnoreRootRepository(hgdir.ParentFolder) {
 		return false
 	}
 
@@ -86,8 +91,8 @@ func (hg *Mercurial) shouldDisplay() bool {
 }
 
 func (hg *Mercurial) setDir(dir string) {
-	dir = platform.ReplaceHomeDirPrefixWithTilde(hg.env, dir) // align with template PWD
-	if hg.env.GOOS() == platform.WINDOWS {
+	dir = path.ReplaceHomeDirPrefixWithTilde(dir) // align with template PWD
+	if hg.env.GOOS() == runtime.WINDOWS {
 		hg.Dir = strings.TrimSuffix(dir, `\.hg`)
 		return
 	}

@@ -41,7 +41,8 @@ Install the latest version for your system by running the following command:
 curl -s https://ohmyposh.dev/install.sh | bash -s
 ```
 
-By default the script will install to `/usr/local/bin` or the existing Oh My Posh executable's installation folder.
+By default the script will install to `~/bin` or `~/.local/bin` depending on which one exists,
+or the existing Oh My Posh executable's installation folder.
 If you want to install to a different location you can specify it using the `-d` flag:
 
 ```bash
@@ -51,6 +52,12 @@ curl -s https://ohmyposh.dev/install.sh | bash -s -- -d ~/bin
 </TabItem>
 <TabItem value="homebrew">
 
+:::warning
+When installing Homebrew for Linux,
+be sure to follow *[Next steps][nextsteps]* instructions to add Homebrew to your PATH and to your
+bash shell profile script, and *[Requirements][requirements]* to build Oh My Posh.
+:::
+
 <InstallHomebrew />
 
 </TabItem>
@@ -58,10 +65,6 @@ curl -s https://ohmyposh.dev/install.sh | bash -s -- -d ~/bin
 
 <Next />
 
+[requirements]: https://docs.brew.sh/Homebrew-on-Linux#requirements
+[nextsteps]: https://docs.brew.sh/Homebrew-on-Linux#install
 [fonts]: /docs/installation/fonts
-[scoop]: https://scoop.sh/
-[wt]: https://github.com/microsoft/terminal
-[iterm2]: https://www.iterm2.com/
-[powershell]: https://www.powershellgallery.com/packages/oh-my-posh
-[configuration]: /docs/configuration/overview
-[themes]: /docs/themes

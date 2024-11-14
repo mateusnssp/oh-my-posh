@@ -6,7 +6,12 @@
     "esbenp.prettier-vscode",
     "davidanson.vscode-markdownlint",
     "yzhang.markdown-all-in-one",
-    "bungcip.better-toml",
-    "redhat.vscode-yaml"
+    "tamasfe.even-better-toml",
+    "redhat.vscode-yaml",
+    "ms-vscode.powershell",
+    "sumneko.lua",
+    "bmalehorn.vscode-fish",
+    "elves.elvish",
+    "jnoortheen.xonsh"
   ]
 }

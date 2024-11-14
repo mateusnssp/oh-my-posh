@@ -3,19 +3,20 @@ package segments
 import (
 	"testing"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
+	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
+	"github.com/jandedobbeleer/oh-my-posh/src/shell"
+	"github.com/jandedobbeleer/oh-my-posh/src/template"
 
 	"github.com/stretchr/testify/assert"
-	mock2 "github.com/stretchr/testify/mock"
 )
 
 func TestStatusWriterEnabled(t *testing.T) {
 	cases := []struct {
+		Template string
 		Status   int
 		Expected bool
-		Template string
 	}{
 		{Status: 102, Expected: true},
 		{Status: 0, Expected: false},
@@ -24,18 +25,19 @@ func TestStatusWriterEnabled(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		env := new(mock.MockedEnvironment)
+		env := new(mock.Environment)
 		env.On("StatusCodes").Return(tc.Status, "")
-		env.On("TemplateCache").Return(&platform.TemplateCache{
-			Code: 133,
-		})
-		env.On("Error", mock2.Anything).Return(nil)
-		env.On("DebugF", mock2.Anything, mock2.Anything).Return(nil)
+		env.On("Shell").Return(shell.GENERIC)
 
 		props := properties.Map{}
 		if len(tc.Template) > 0 {
 			props[StatusTemplate] = tc.Template
 		}
+
+		template.Cache = &cache.Template{
+			Code: 133,
+		}
+		template.Init(env, nil)
 
 		s := &Status{}
 		s.Init(props, env)
@@ -47,11 +49,11 @@ func TestStatusWriterEnabled(t *testing.T) {
 func TestFormatStatus(t *testing.T) {
 	cases := []struct {
 		Case       string
-		Status     int
 		PipeStatus string
 		Template   string
 		Separator  string
 		Expected   string
+		Status     int
 	}{
 		{
 			Case:      "No PipeStatus",
@@ -91,18 +93,14 @@ func TestFormatStatus(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		env := new(mock.MockedEnvironment)
-		env.On("TemplateCache").Return(&platform.TemplateCache{
-			Code: 133,
-		})
-		env.On("Error", mock2.Anything).Return(nil)
-		env.On("DebugF", mock2.Anything, mock2.Anything).Return(nil)
 		props := properties.Map{
 			StatusTemplate:  tc.Template,
 			StatusSeparator: tc.Separator,
 		}
+
 		s := &Status{}
-		s.Init(props, env)
+		s.Init(props, new(mock.Environment))
+
 		assert.Equal(t, tc.Expected, s.formatStatus(tc.Status, tc.PipeStatus), tc.Case)
 	}
 }

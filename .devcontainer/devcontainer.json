@@ -8,10 +8,7 @@
       // Update the VARIANT arg to pick a version of Go: 1, 1.16, 1.17
       // Append -bullseye or -buster to pin to an OS version.
       // Use -bullseye variants on local arm64/Apple Silicon.
-      "VARIANT": "1.20-bullseye",
-
-      // Options:
-      "POSH_THEME": "/workspaces/oh-my-posh/themes/jandedobbeleer.omp.json",
+      "VARIANT": "1-1.22-bullseye",
 
       // Override me with your own timezone:
       "TZ": "UTC",
@@ -23,7 +20,16 @@
       "PS_VERSION": "7.2.7"
     }
   },
-  "runArgs": ["--cap-add=SYS_PTRACE", "--security-opt", "seccomp=unconfined"],
+  "runArgs": [
+    "--cap-add=SYS_PTRACE",
+    "--security-opt",
+    "seccomp=unconfined",
+    "--security-opt",
+    "label=disable"
+  ],
+  "containerEnv": {
+    "HOME": "/home/vscode"
+  },
 
   "customizations": {
     "vscode": {
@@ -54,12 +60,13 @@
         "terminal.integrated.defaultProfile.linux": "pwsh",
         "terminal.integrated.defaultProfile.windows": "pwsh",
         "terminal.integrated.defaultProfile.osx": "pwsh",
+        "terminal.integrated.shellIntegration.enabled": false,
         "tasks.statusbar.default.hide": true
       },
       "extensions": [
         "actboy168.tasks",
         "eamodio.gitlens",
-        "bungcip.better-toml",
+        "tamasfe.even-better-toml",
         "davidanson.vscode-markdownlint",
         "editorconfig.editorconfig",
         "esbenp.prettier-vscode",
@@ -73,5 +80,9 @@
     }
   },
   // Comment out connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
-  "remoteUser": "vscode"
+  "remoteUser": "vscode",
+  // This is running the same command as the VSCode Task 'devcontainer: rebuild oh-my-posh'
+  // It Compiles *oh-my-posh* from this repo while **overwriting** your preinstalled stable release.'
+  // Ideal for getting straight into developing & testing whilst using a devcontainer
+  "updateContentCommand": "cd src && go build -v -buildvcs=false -o /home/vscode/bin/oh-my-posh -ldflags \"-s -w -X 'github.com/jandedobbeleer/oh-my-posh/src/build.Version=development-$(git --no-pager log -1 --pretty=%h-%s)' -extldflags '-static'\""
 }

@@ -1,9 +1,12 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 install_dir=""
+themes_dir=""
+executable=""
+version=""
 
 error() {
-    printf "\x1b[31m$1\e[0m\n"
+    printf "\e[31m$1\e[0m\n"
     exit 1
 }
 
@@ -12,34 +15,40 @@ info() {
 }
 
 warn() {
-    printf "⚠️  \x1b[33m$1\e[0m\n"
+    printf "⚠️  \e[33m$1\e[0m\n"
 }
 
 help() {
     # Display Help
-    echo "Installs Oh My Posh"
+    echo "Install script for Oh My Posh"
     echo
-    echo "Syntax: install.sh [-h|d]"
+    echo "Syntax: install.sh [-h] [-d <dir>] [-t <dir>] [-v <ver>]"
     echo "options:"
-    echo "h     Print this Help."
-    echo "d     Specify the installation directory. Defaults to /usr/local/bin or the directory where oh-my-posh is installed."
+    echo "-h     Print this help."
+    echo "-d     Specify the installation directory. Defaults to $HOME/bin, $HOME/.local/bin or the directory where oh-my-posh is installed."
+    echo "-t     Specify the themes installation directory. Defaults to the oh-my-posh cache directory."
+    echo "-v     Version to download, defaults to latest"
     echo
 }
 
-while getopts ":hd:" option; do
+while getopts ":hd:t:v:" option; do
    case $option in
       h) # display Help
          help
          exit;;
       d) # Enter a name
-         install_dir=$OPTARG;;
+         install_dir=${OPTARG};;
+      t) # themes directory
+         themes_dir=${OPTARG};;
+      v) # version
+         version=${OPTARG};;
      \?) # Invalid option
          echo "Invalid option command line option. Use -h for help."
          exit 1
    esac
 done
 
-SUPPORTED_TARGETS="linux-amd64 linux-arm linux-arm64 darwin-amd64 darwin-arm64"
+SUPPORTED_TARGETS="linux-386 linux-amd64 linux-arm linux-arm64 darwin-amd64 darwin-arm64 freebsd-386 freebsd-amd64 freebsd-arm freebsd-arm64"
 
 validate_dependency() {
     if ! command -v $1 >/dev/null; then
@@ -69,19 +78,33 @@ set_install_directory() {
         install_dir=$(dirname $real_dir)
         info "Oh My Posh is already installed, updating existing installation in:"
         info "  ${install_dir}"
-    else
-        install_dir="/usr/local/bin"
+        return 0
     fi
+
+    # check if $HOME/bin exists and is writable
+    if [ -d "$HOME/bin" ] && [ -w "$HOME/bin" ]; then
+        install_dir="$HOME/bin"
+        return 0
+    fi
+
+    # check if $HOME/.local/bin exists and is writable
+    if ([ -d "$HOME/.local/bin" ] && [ -w "$HOME/.local/bin" ]) || mkdir -p "$HOME/.local/bin"; then
+        install_dir="$HOME/.local/bin"
+        return 0
+    fi
+
+    error "Cannot determine installation directory. Please specify a directory and try again: \ncurl -s https://ohmyposh.dev/install.sh | bash -s -- -d {directory}"
 }
 
 validate_install_directory() {
+    #check if installation dir exists
     if [ ! -d "$install_dir" ]; then
         error "Directory ${install_dir} does not exist, set a different directory and try again."
     fi
 
-    # check if we can write to the install directory
-    if [ ! -w $install_dir ]; then
-        error "Cannot write to ${install_dir}. Please run the script with sudo and try again:\n  curl -s https://ohmyposh.dev/install.sh | sudo bash -s\n\nAlternatively, you can set a different directory and try again: \n  curl -s https://ohmyposh.dev/install.sh | bash -s -- -d {directory}"
+    # Check if regular user has write permission
+    if [ ! -w "$install_dir" ]; then
+        error "Cannot write to ${install_dir}. Please check write permissions or set a different directory and try again: \ncurl -s https://ohmyposh.dev/install.sh | bash -s -- -d {directory}"
     fi
 
     # check if the directory is in the PATH
@@ -96,7 +119,53 @@ validate_install_directory() {
     )
 
     if [ "${good}" != "1" ]; then
-        warn "Installation directory ${install_dir} is not in your \$PATH"
+        warn "Installation directory ${install_dir} is not in your \$PATH, add it using \nexport PATH=\$PATH:${install_dir}"
+    fi
+}
+
+validate_themes_directory() {
+
+    # Validate if the themes directory exists
+    if ! mkdir -p "$themes_dir" > /dev/null 2>&1; then
+        error "Cannot write to ${themes_dir}. Please check write permissions or set a different directory and try again: \ncurl -s https://ohmyposh.dev/install.sh | bash -s -- -t {directory}"
+    fi
+
+    #check user write permission
+    if [ ! -w "$themes_dir" ]; then
+        error "Cannot write to ${themes_dir}. Please check write permissions or set a different directory and try again: \ncurl -s https://ohmyposh.dev/install.sh | bash -s -- -t {directory}"
+    fi
+}
+
+install_themes() {
+    if [ -n "$themes_dir" ]; then
+        # expand directory
+        themes_dir="${themes_dir/#\~/$HOME}"
+    fi
+
+    cache_dir=$($executable cache path)
+
+    # validate if the user set the path to the themes directory
+    if [ -z "$themes_dir" ]; then
+        themes_dir="${cache_dir}/themes"
+    fi
+
+    validate_themes_directory
+
+    info "🎨 Installing oh-my-posh themes in ${themes_dir}\n"
+
+    zip_file="${cache_dir}/themes.zip"
+
+    url="https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip"
+
+    http_response=$(curl -s -f -L $url -o $zip_file -w "%{http_code}")
+
+    if [ $http_response = "200" ] && [ -f $zip_file ]; then
+        unzip -o -q $zip_file -d $themes_dir
+        # make sure the files are readable and writable for all users
+        chmod a+rwX ${themes_dir}/*.omp.*
+        rm $zip_file
+    else
+        warn "Unable to download themes at ${url}\nPlease validate your curl, connection and/or proxy settings"
     fi
 }
 
@@ -123,38 +192,27 @@ install() {
 
     executable=${install_dir}/oh-my-posh
     url=https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/posh-${target}
+    if [ "$version" ]; then
+      url=https://github.com/JanDeDobbeleer/oh-my-posh/releases/download/${version}/posh-${target}
+    fi
 
     info "⬇️  Downloading oh-my-posh from ${url}"
 
     http_response=$(curl -s -f -L $url -o $executable -w "%{http_code}")
-    if [ $http_response != "200" ]; then
-        error "Unable to download executable at ${url}\nPlease validate your connection and/or proxy settings"
+
+    if [ $http_response != "200" ] || [ ! -f $executable ]; then
+        error "Unable to download executable at ${url}\nPlease validate your curl, connection and/or proxy settings"
     fi
 
     chmod +x $executable
 
-    # install themes in cache
-    cache_dir=$($executable cache path)
-
-    info "🎨 Installing oh-my-posh themes in ${cache_dir}/themes\n"
-
-    theme_dir="${cache_dir}/themes"
-    url="https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip"
-    mkdir -p $theme_dir
-    http_response=$(curl -s -f -L $url -o ${cache_dir}/themes.zip -w "%{http_code}")
-    if [ $http_response == "200" ]; then
-        unzip -o -q ${cache_dir}/themes.zip -d $theme_dir
-        chmod u+rw ${theme_dir}/*.omp.*
-        rm ${cache_dir}/themes.zip
-    else
-        warn "Unable to download themes at ${url}\nPlease validate your connection and/or proxy settings"
-    fi
+    install_themes
 
     info "🚀 Installation complete.\n\nYou can follow the instructions at https://ohmyposh.dev/docs/installation/prompt"
     info "to setup your shell to use oh-my-posh."
-    if [ $http_response == "200" ]; then
-        info "\nIf you want to use a built-in theme, you can find them in the ${theme_dir} directory:"
-        info "  oh-my-posh init {shell} --config ${theme_dir}/{theme}.omp.json\n"
+    if [ $http_response = "200" ]; then
+        info "\nIf you want to use a built-in theme, you can find them in the ${themes_dir} directory:"
+        info "  oh-my-posh init {shell} --config ${themes_dir}/{theme}.omp.json\n"
     fi
 }
 
@@ -166,6 +224,7 @@ detect_arch() {
     armv*) arch="arm" ;;
     arm64) arch="arm64" ;;
     aarch64) arch="arm64" ;;
+    i686) arch="386" ;;
   esac
 
   if [ "${arch}" = "arm64" ] && [ "$(getconf LONG_BIT)" -eq 32 ]; then

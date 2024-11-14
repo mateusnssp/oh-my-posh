@@ -3,35 +3,33 @@ package segments
 import (
 	"testing"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestSvnEnabledToolNotFound(t *testing.T) {
-	env := new(mock.MockedEnvironment)
+	env := new(mock.Environment)
 	env.On("InWSLSharedDrive").Return(false)
 	env.On("HasCommand", "svn").Return(false)
 	env.On("GOOS").Return("")
 	env.On("IsWsl").Return(false)
-	s := &Svn{
-		scm: scm{
-			env:   env,
-			props: properties.Map{},
-		},
-	}
+
+	s := &Svn{}
+	s.Init(properties.Map{}, env)
+
 	assert.False(t, s.Enabled())
 }
 
 func TestSvnEnabledInWorkingDirectory(t *testing.T) {
-	fileInfo := &platform.FileInfo{
+	fileInfo := &runtime.FileInfo{
 		Path:         "/dir/hello",
 		ParentFolder: "/dir",
 		IsDir:        true,
 	}
-	env := new(mock.MockedEnvironment)
+	env := new(mock.Environment)
 	env.On("InWSLSharedDrive").Return(false)
 	env.On("HasCommand", "svn").Return(true)
 	env.On("GOOS").Return("")
@@ -40,13 +38,11 @@ func TestSvnEnabledInWorkingDirectory(t *testing.T) {
 	env.On("RunCommand", "svn", []string{"info", "/dir/hello", "--show-item", "revision"}).Return("", nil)
 	env.On("RunCommand", "svn", []string{"info", "/dir/hello", "--show-item", "relative-url"}).Return("", nil)
 	env.On("IsWsl").Return(false)
-	env.On("HasParentFilePath", ".svn").Return(fileInfo, nil)
-	s := &Svn{
-		scm: scm{
-			env:   env,
-			props: properties.Map{},
-		},
-	}
+	env.On("HasParentFilePath", ".svn", false).Return(fileInfo, nil)
+
+	s := &Svn{}
+	s.Init(properties.Map{}, env)
+
 	assert.True(t, s.Enabled())
 	assert.Equal(t, fileInfo.Path, s.workingDir)
 	assert.Equal(t, fileInfo.Path, s.realDir)
@@ -54,10 +50,10 @@ func TestSvnEnabledInWorkingDirectory(t *testing.T) {
 
 func TestSvnTemplateString(t *testing.T) {
 	cases := []struct {
+		Svn      *Svn
 		Case     string
 		Expected string
 		Template string
-		Svn      *Svn
 	}{
 		{
 			Case:     "Default template",
@@ -157,7 +153,7 @@ func TestSvnTemplateString(t *testing.T) {
 		props := properties.Map{
 			FetchStatus: true,
 		}
-		env := new(mock.MockedEnvironment)
+		env := new(mock.Environment)
 		tc.Svn.env = env
 		tc.Svn.props = props
 		assert.Equal(t, tc.Expected, renderTemplate(env, tc.Template, tc.Svn), tc.Case)
@@ -225,32 +221,34 @@ R       Moved.File`,
 		},
 	}
 	for _, tc := range cases {
-		fileInfo := &platform.FileInfo{
+		fileInfo := &runtime.FileInfo{
 			Path:         "/dir/hello",
 			ParentFolder: "/dir",
 			IsDir:        true,
 		}
-		env := new(mock.MockedEnvironment)
+		env := new(mock.Environment)
 		env.On("InWSLSharedDrive").Return(false)
 		env.On("IsWsl").Return(false)
 		env.On("HasCommand", "svn").Return(true)
 		env.On("GOOS").Return("")
 		env.On("FileContent", "/dir/hello/trunk").Return("")
 		env.MockSvnCommand(fileInfo.Path, "", "info", "--tags", "--exact-match")
-		env.On("HasParentFilePath", ".svn").Return(fileInfo, nil)
+		env.On("HasParentFilePath", ".svn", false).Return(fileInfo, nil)
 		env.On("RunCommand", "svn", []string{"info", "", "--show-item", "revision"}).Return(tc.RefOutput, nil)
 		env.On("RunCommand", "svn", []string{"info", "", "--show-item", "relative-url"}).Return(tc.BranchOutput, nil)
 		env.On("RunCommand", "svn", []string{"status", ""}).Return(tc.StatusOutput, nil)
 
+		props := properties.Map{
+			FetchStatus: true,
+		}
+
 		s := &Svn{
 			scm: scm{
-				env: env,
-				props: properties.Map{
-					FetchStatus: true,
-				},
 				command: SVNCOMMAND,
 			},
 		}
+		s.Init(props, env)
+
 		s.setSvnStatus()
 		if tc.ExpectedWorking == nil {
 			tc.ExpectedWorking = &SvnStatus{}
@@ -260,5 +258,47 @@ R       Moved.File`,
 		assert.Equal(t, tc.ExpectedBranch, s.Branch, tc.Case)
 		assert.Equal(t, tc.ExpectedChanged, s.Working.Changed(), tc.Case)
 		assert.Equal(t, tc.ExpectedConflicts, s.Working.HasConflicts(), tc.Case)
+	}
+}
+
+func TestRepo(t *testing.T) {
+	cases := []struct {
+		Case     string
+		Repo     string
+		Expected string
+	}{
+		{
+			Case:     "No repo",
+			Repo:     "",
+			Expected: "",
+		},
+		{
+			Case:     "Repo with trailing slash",
+			Repo:     "http://example.com/",
+			Expected: "example.com",
+		},
+		{
+			Case:     "Repo without trailing slash",
+			Repo:     "http://example.com",
+			Expected: "example.com",
+		},
+		{
+			Case:     "Repo with a path",
+			Repo:     "http://example.com/test/repo",
+			Expected: "repo",
+		},
+	}
+	for _, tc := range cases {
+		env := new(mock.Environment)
+		env.On("RunCommand", "svn", []string{"info", "", "--show-item", "repos-root-url"}).Return(tc.Repo, nil)
+
+		s := &Svn{
+			scm: scm{
+				command: SVNCOMMAND,
+			},
+		}
+		s.Init(properties.Map{}, env)
+
+		assert.Equal(t, tc.Expected, s.Repo(), tc.Case)
 	}
 }

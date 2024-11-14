@@ -1,25 +1,33 @@
 export POSH_THEME=::CONFIG::
 export POSH_SHELL_VERSION=$ZSH_VERSION
-export POSH_PID=$$
-export POWERLINE_COMMAND="oh-my-posh"
+export POSH_SESSION_ID=::SESSION_ID::
+export POWERLINE_COMMAND='oh-my-posh'
 export CONDA_PROMPT_MODIFIER=false
-export POSH_PROMPT_COUNT=0
+export ZLE_RPROMPT_INDENT=0
+export OSTYPE=$OSTYPE
+
+_omp_executable=::OMP::
+_omp_tooltip_command=''
+
+# switches to enable/disable features
+_omp_cursor_positioning=0
+_omp_ftcs_marks=0
 
 # set secondary prompt
-PS2="$(::OMP:: print secondary --config="$POSH_THEME" --shell=zsh)"
+_omp_secondary_prompt=$($_omp_executable print secondary --shell=zsh)
 
-function _set_posh_cursor_position() {
+function _omp_set_cursor_position() {
   # not supported in Midnight Commander
   # see https://github.com/JanDeDobbeleer/oh-my-posh/issues/3415
-  if [[ "::CURSOR::" != "true" ]] || [[ -v MC_SID ]]; then
-      return
+  if [[ $_omp_cursor_positioning == 0 ]] || [[ -v MC_SID ]]; then
+    return
   fi
 
   local oldstty=$(stty -g)
   stty raw -echo min 0
 
   local pos
-  echo -en "\033[6n" > /dev/tty
+  echo -en '\033[6n' >/dev/tty
   read -r -d R pos
   pos=${pos:2} # strip off the esc-[
   local parts=(${(s:;:)pos})
@@ -35,132 +43,183 @@ function set_poshcontext() {
   return
 }
 
-function prompt_ohmyposh_preexec() {
-  if [[ "::FTCS_MARKS::" = "true" ]]; then
-    printf "\033]133;C\007"
+function _omp_preexec() {
+  if [[ $_omp_ftcs_marks == 1 ]]; then
+    printf '\033]133;C\007'
   fi
-  omp_start_time=$(::OMP:: get millis)
+
+  _omp_start_time=$($_omp_executable get millis)
 }
 
-function prompt_ohmyposh_precmd() {
-  omp_last_error=$? pipeStatus=(${pipestatus[@]})
-  omp_stack_count=${#dirstack[@]}
-  omp_elapsed=-1
-  no_exit_code="true"
-  if [ $omp_start_time ]; then
-    local omp_now=$(::OMP:: get millis --shell=zsh)
-    omp_elapsed=$(($omp_now-$omp_start_time))
-    no_exit_code="false"
+function _omp_precmd() {
+  _omp_status=$?
+  _omp_pipestatus=(${pipestatus[@]})
+  _omp_stack_count=${#dirstack[@]}
+  _omp_execution_time=-1
+  _omp_no_status=true
+  _omp_tooltip_command=''
+
+  if [ $_omp_start_time ]; then
+    local omp_now=$($_omp_executable get millis)
+    _omp_execution_time=$(($omp_now - $_omp_start_time))
+    _omp_no_status=false
   fi
-  count=$((POSH_PROMPT_COUNT+1))
-  export POSH_PROMPT_COUNT=$count
+
+  if [[ ${_omp_pipestatus[-1]} != "$_omp_status" ]]; then
+    _omp_pipestatus=("$_omp_status")
+  fi
+
   set_poshcontext
-  _set_posh_cursor_position
-  eval "$(::OMP:: print primary --config="$POSH_THEME" --status="$omp_last_error" --pipestatus="${pipeStatus[*]}" --execution-time="$omp_elapsed" --stack-count="$omp_stack_count" --eval --shell=zsh --shell-version="$ZSH_VERSION" --no-status="$no_exit_code")"
-  unset omp_start_time
+  _omp_set_cursor_position
+
+  # We do this to avoid unexpected expansions in a prompt string.
+  unsetopt PROMPT_SUBST
+  unsetopt PROMPT_BANG
+
+  # Ensure that escape sequences work in a prompt string.
+  setopt PROMPT_PERCENT
+
+  PS2=$_omp_secondary_prompt
+  eval "$(_omp_get_prompt primary --eval)"
+
+  unset _omp_start_time
 }
 
 # add hook functions
 autoload -Uz add-zsh-hook
-add-zsh-hook precmd prompt_ohmyposh_precmd
-add-zsh-hook preexec prompt_ohmyposh_preexec
+add-zsh-hook precmd _omp_precmd
+add-zsh-hook preexec _omp_preexec
 
-# perform cleanup so a new initialization in current session works
-if [[ "$(zle -lL self-insert)" = *"_posh-tooltip"* ]]; then
-  zle -N self-insert
-fi
-if [[ "$(zle -lL zle-line-init)" = *"_posh-zle-line-init"* ]]; then
-  zle -N zle-line-init
-fi
-
-function _posh-tooltip() {
-  # https://github.com/zsh-users/zsh-autosuggestions - clear suggestion to avoid keeping it after the newly inserted space
-  if [[ -n "$(zle -lL autosuggest-clear)" ]]; then
-    # only if suggestions not disabled (variable not set)
-    if ! [[ -v _ZSH_AUTOSUGGEST_DISABLED ]]; then
-      zle autosuggest-clear
+# Prevent incorrect behaviors when the initialization is executed twice in current session.
+function _omp_cleanup() {
+  local omp_widgets=(
+    self-insert
+    zle-line-init
+  )
+  local widget
+  for widget in "${omp_widgets[@]}"; do
+    if [[ ${widgets[._omp_original::$widget]} ]]; then
+      # Restore the original widget.
+      zle -A ._omp_original::$widget $widget
+    elif [[ ${widgets[$widget]} = user:_omp_* ]]; then
+      # Delete the OMP-defined widget.
+      zle -D $widget
     fi
-  fi
-  zle .self-insert
-  # https://github.com/zsh-users/zsh-autosuggestions - fetch new suggestion after the space
-  if [[ -n "$(zle -lL autosuggest-fetch)" ]]; then
-    # only if suggestions not disabled (variable not set)
-    if ! [[ -v _ZSH_AUTOSUGGEST_DISABLED ]]; then
-      zle autosuggest-fetch
-    fi
-  fi
+  done
+}
+_omp_cleanup
+unset -f _omp_cleanup
 
-  # get the first word of command line as tip
-  local tip=${${(MS)BUFFER##[[:graph:]]*}%%[[:space:]]*}
-  # ignore an empty tip
-  if [[ -z "$tip" ]]; then
+function _omp_get_prompt() {
+  local type=$1
+  local args=("${@[2,-1]}")
+  $_omp_executable print $type \
+    --save-cache \
+    --shell=zsh \
+    --shell-version=$ZSH_VERSION \
+    --status=$_omp_status \
+    --pipestatus="${_omp_pipestatus[*]}" \
+    --no-status=$_omp_no_status \
+    --execution-time=$_omp_execution_time \
+    --stack-count=$_omp_stack_count \
+    ${args[@]}
+}
+
+function _omp_render_tooltip() {
+  if [[ $KEYS != ' ' ]]; then
     return
   fi
-  local tooltip=$(::OMP:: print tooltip --config="$POSH_THEME" --shell=zsh --status="$omp_last_error" --command="$tip" --shell-version="$ZSH_VERSION")
-  # ignore an empty tooltip
-  if [[ -z "$tooltip" ]]; then
+
+  # Get the first word of command line as tip.
+  local tooltip_command=${${(MS)BUFFER##[[:graph:]]*}%%[[:space:]]*}
+
+  # Ignore an empty/repeated tooltip command.
+  if [[ -z $tooltip_command ]] || [[ $tooltip_command = "$_omp_tooltip_command" ]]; then
     return
   fi
+
+  _omp_tooltip_command="$tooltip_command"
+  local tooltip=$(_omp_get_prompt tooltip --command="$tooltip_command")
+  if [[ -z $tooltip ]]; then
+    return
+  fi
+
   RPROMPT=$tooltip
   zle .reset-prompt
 }
 
-function _posh-zle-line-init() {
-    [[ $CONTEXT == start ]] || return 0
+function _omp_zle-line-init() {
+  [[ $CONTEXT == start ]] || return 0
 
-    # Start regular line editor
-    (( $+zle_bracketed_paste )) && print -r -n - $zle_bracketed_paste[1]
-    zle .recursive-edit
-    local -i ret=$?
-    (( $+zle_bracketed_paste )) && print -r -n - $zle_bracketed_paste[2]
+  # Start regular line editor.
+  (( $+zle_bracketed_paste )) && print -r -n - $zle_bracketed_paste[1]
+  zle .recursive-edit
+  local -i ret=$?
+  (( $+zle_bracketed_paste )) && print -r -n - $zle_bracketed_paste[2]
 
-    eval "$(::OMP:: print transient --status="$omp_last_error" --execution-time="$omp_elapsed" --stack-count="$omp_stack_count" --config="$POSH_THEME" --eval --shell=zsh --shell-version="$ZSH_VERSION" --no-status="$no_exit_code")"
-    zle .reset-prompt
+  eval "$(_omp_get_prompt transient --eval)"
+  zle .reset-prompt
 
-    # If we received EOT, we exit the shell
-    if [[ $ret == 0 && $KEYS == $'\4' ]]; then
-        exit
-    fi
+  if ((ret)); then
+    # TODO (fix): this is not equal to sending a SIGINT, since the status code ($?) is set to 1 instead of 130.
+    zle .send-break
+  fi
 
-    # Ctrl-C
-    if (( ret )); then
-        zle .send-break
-    else
-        # Enter
-        zle .accept-line
-    fi
-    return ret
+  # Exit the shell if we receive EOT.
+  if [[ $KEYS == $'\4' ]]; then
+    exit
+  fi
+
+  zle .accept-line
+  return $ret
+}
+
+# Helper function for calling a widget before the specified OMP function.
+function _omp_call_widget() {
+  # The name of the OMP function.
+  local omp_func=$1
+  # The remainder are the widget to call and potential arguments.
+  shift
+
+  zle "$@" && shift 2 && $omp_func "$@"
+}
+
+# Create a widget with the specified OMP function.
+# An existing widget will be preserved and decorated with the function.
+function _omp_create_widget() {
+  # The name of the widget to create/decorate.
+  local widget=$1
+  # The name of the OMP function.
+  local omp_func=$2
+
+  case ${widgets[$widget]:-''} in
+  # Already decorated: do nothing.
+  user:_omp_decorated_*) ;;
+
+  # Non-existent: just create it.
+  '')
+    zle -N $widget $omp_func
+    ;;
+
+  # User-defined or builtin: backup and decorate it.
+  *)
+    # Back up the original widget. The leading dot in widget name is to work around bugs when used with zsh-syntax-highlighting in Zsh v5.8 or lower.
+    zle -A $widget ._omp_original::$widget
+    eval "_omp_decorated_${(q)widget}() { _omp_call_widget ${(q)omp_func} ._omp_original::${(q)widget} -- \"\$@\" }"
+    zle -N $widget _omp_decorated_$widget
+    ;;
+  esac
 }
 
 function enable_poshtooltips() {
-  zle -N _posh-tooltip
-  bindkey " " _posh-tooltip
+  local widget=${$(bindkey ' '):2}
+
+  if [[ -z $widget ]]; then
+    widget=self-insert
+  fi
+
+  _omp_create_widget $widget _omp_render_tooltip
 }
 
-function enable_poshtransientprompt() {
-  zle -N zle-line-init _posh-zle-line-init
-
-  # restore broken key bindings
-  # https://github.com/JanDeDobbeleer/oh-my-posh/discussions/2617#discussioncomment-3911044
-  bindkey '^[[F' end-of-line
-  bindkey '^[[H' beginning-of-line
-  _widgets=$(zle -la)
-  if [[ -n "${_widgets[(r)down-line-or-beginning-search]}" ]]; then
-    bindkey '^[[B' down-line-or-beginning-search
-  fi
-  if [[ -n "${_widgets[(r)up-line-or-beginning-search]}" ]]; then
-    bindkey '^[[A' up-line-or-beginning-search
-  fi
-}
-
-if [[ "::TOOLTIPS::" = "true" ]]; then
-  enable_poshtooltips
-fi
-
-if [[ "::TRANSIENT::" = "true" ]]; then
-  enable_poshtransientprompt
-fi
-
-if [[ "::UPGRADE::" = "true" ]]; then
-    echo "::UPGRADENOTICE::"
-fi
+# legacy functions
+function enable_poshtransientprompt() {}

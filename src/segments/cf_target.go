@@ -4,13 +4,11 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 )
 
 type CfTarget struct {
-	props properties.Properties
-	env   platform.Environment
+	base
 
 	CfTargetDetails
 }
@@ -26,11 +24,6 @@ func (c *CfTarget) Template() string {
 	return "{{if .Org }}{{ .Org }}{{ end }}{{if .Space }}/{{ .Space }}{{ end }}"
 }
 
-func (c *CfTarget) Init(props properties.Properties, env platform.Environment) {
-	c.props = props
-	c.env = env
-}
-
 func (c *CfTarget) Enabled() bool {
 	if !c.env.HasCommand("cf") {
 		return false
@@ -41,12 +34,17 @@ func (c *CfTarget) Enabled() bool {
 		return c.setCFTargetStatus()
 	}
 
-	manifest, err := c.env.HasParentFilePath("manifest.yml")
-	if err != nil || manifest.IsDir {
-		return false
+	files := c.props.GetStringArray(properties.Files, []string{"manifest.yml"})
+	for _, file := range files {
+		manifest, err := c.env.HasParentFilePath(file, false)
+		if err != nil || manifest.IsDir {
+			continue
+		}
+
+		return c.setCFTargetStatus()
 	}
 
-	return c.setCFTargetStatus()
+	return false
 }
 
 func (c *CfTarget) setCFTargetStatus() bool {

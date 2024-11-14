@@ -8,7 +8,6 @@ linters:
     - dupl
     - errcheck
     - exhaustive
-    - gochecknoinits
     - goconst
     - gocritic
     - gocyclo
@@ -36,13 +35,11 @@ linters-settings:
   gocritic:
     enabled-tags:
       - diagnostic
-      - experimental
+      # - experimental
       - opinionated
       - performance
       - style
     disabled-tags:
       - experimental
-    disabled-checks:
-      - ifElseChain
   lll:
     line-length: 180

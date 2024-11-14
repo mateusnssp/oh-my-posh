@@ -2,8 +2,6 @@ package template
 
 import (
 	"strings"
-
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 )
 
 type Logic string
@@ -19,25 +17,30 @@ func (l List) Empty() bool {
 	return len(l) == 0
 }
 
-func (l List) Resolve(context interface{}, env platform.Environment, defaultValue string, logic Logic) string {
+func (l List) Resolve(context any, defaultValue string, logic Logic) string {
+	if l.Empty() {
+		return defaultValue
+	}
+
 	switch logic {
 	case FirstMatch:
-		return l.FirstMatch(context, env, defaultValue)
+		return l.FirstMatch(context, defaultValue)
 	case Join:
 		fallthrough
 	default:
-		return l.Join(context, env)
+		return l.Join(context)
 	}
 }
 
-func (l List) Join(context interface{}, env platform.Environment) string {
+func (l List) Join(context any) string {
 	if len(l) == 0 {
 		return ""
 	}
+
 	txtTemplate := &Text{
 		Context: context,
-		Env:     env,
 	}
+
 	var buffer strings.Builder
 	for _, tmpl := range l {
 		txtTemplate.Template = tmpl
@@ -45,19 +48,22 @@ func (l List) Join(context interface{}, env platform.Environment) string {
 		if err != nil || len(strings.TrimSpace(value)) == 0 {
 			continue
 		}
+
 		buffer.WriteString(value)
 	}
+
 	return buffer.String()
 }
 
-func (l List) FirstMatch(context interface{}, env platform.Environment, defaultValue string) string {
+func (l List) FirstMatch(context any, defaultValue string) string {
 	if len(l) == 0 {
 		return defaultValue
 	}
+
 	txtTemplate := &Text{
 		Context: context,
-		Env:     env,
 	}
+
 	for _, tmpl := range l {
 		txtTemplate.Template = tmpl
 		value, err := txtTemplate.Render()
@@ -66,5 +72,6 @@ func (l List) FirstMatch(context interface{}, env platform.Environment, defaultV
 		}
 		return value
 	}
+
 	return defaultValue
 }

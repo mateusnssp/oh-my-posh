@@ -1,0 +1,49 @@
+---
+id: upgrade
+title: Upgrade
+sidebar_label: ♻️ Upgrade
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+## Manual
+
+While you can always follow the upgrade steps listed under the installation section,
+you can also use the `upgrade` command to update Oh My Posh to the latest version.
+
+```powershell
+oh-my-posh upgrade
+```
+
+## Automated
+
+<Tabs
+  defaultValue="cli"
+  groupId="sample"
+  values={[
+    { label: 'CLI', value: 'cli', },
+    { label: 'Configuration', value: 'config', },
+  ]
+}>
+<TabItem value="cli">
+
+```powershell
+oh-my-posh enable upgrade
+```
+
+</TabItem>
+<TabItem value="config">
+
+import Config from "@site/src/components/Config.js";
+
+<Config
+  data={{
+    "auto_upgrade": true
+  }}
+/>
+
+</TabItem>
+</Tabs>
+
+[customize]: /docs/installation/customize#custom-configuration

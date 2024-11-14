@@ -1,9 +1,10 @@
 ---
 id: windows
 title: Windows
-sidebar_label: ⊞ Windows
+sidebar_label:  🪟  Windows
 ---
 
+import ThemedImage from '@theme/ThemedImage';
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 import Next from "./next.mdx";
@@ -20,11 +21,15 @@ To display all icons, we recommend the use of a [Nerd Font][fonts].
 When using oh-my-posh inside the WSL, make sure to follow the [Linux][linux] installation guide.
 :::
 
-<a href="pathname://ms-windows-store://pdp/?productid=XP8K0HKJFRXGCK" target="_blank">
-  <img
-    src={require('/img/winstore.png').default}
-    alt="Windows Store Link"
-    className="winstore"
+<a href="https://apps.microsoft.com/detail/xp8k0hkjfrxgck?mode=mini" target="_blank">
+  <ThemedImage 
+    alt="msstore"
+    width="232"
+    height="68"
+    sources={{
+      light: '/img/msstore-dark.svg',
+      dark: '/img/msstore-light.svg',
+    }}
   />
 </a>
 
@@ -37,6 +42,7 @@ When using oh-my-posh inside the WSL, make sure to follow the [Linux][linux] ins
     { label: 'winget', value: 'winget', },
     { label: 'scoop', value: 'scoop', },
     { label: 'manual', value: 'manual', },
+    { label: 'chocolatey', value: 'chocolatey'},
   ]
 }>
 <TabItem value="winget">
@@ -66,6 +72,20 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object
 ```
 
 </TabItem>
+<TabItem value="chocolatey">
+
+:::info
+The chocolatey package is maintained by the community and might not be up to date.
+In case of issues, please contact the [maintainer][choco-maintainer].
+:::
+
+Open a PowerShell prompt and run the following command:
+
+```powershell
+choco install oh-my-posh
+```
+
+</TabItem>
 </Tabs>
 
 This installs a couple of things:
@@ -73,7 +93,15 @@ This installs a couple of things:
 - `oh-my-posh.exe` - Windows executable
 - `themes` - The latest Oh My Posh [themes][themes]
 
+:::info
 For the `PATH` to be reloaded, a restart of your terminal is advised.
+If oh-my-posh is not recognized as a command, you can run the installer again, or add it manually to your `PATH`.
+For example:
+
+```powershell
+$env:Path += ";C:\Users\user\AppData\Local\Programs\oh-my-posh\bin"
+```
+:::
 
 :::tip Antivirus software
 Due to frequent updates of Oh My Posh, Antivirus software occasionally flags it (false positive).
@@ -97,6 +125,7 @@ Exclusions should be added with the full path to the executable, you can get it 
     { label: 'winget', value: 'winget', },
     { label: 'scoop', value: 'scoop', },
     { label: 'manual', value: 'manual', },
+    { label: 'chocolatey', value: 'chocolatey'},
   ]
 }>
 <TabItem value="winget">
@@ -126,12 +155,26 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; Invoke-Expression ((New-Object
 ```
 
 </TabItem>
+<TabItem value="chocolatey">
+
+:::info
+The chocolatey package is maintained by the community and might not be up to date.
+In case of issues, please contact the [maintainer][choco-maintainer].
+:::
+
+Open a PowerShell prompt and run the following command:
+
+```powershell
+choco upgrade oh-my-posh
+```
+
+</TabItem>
 </Tabs>
 
 ## Default themes
 
 You can find the themes in the folder indicated by the environment variable `POSH_THEMES_PATH`.
-For example, you can use `oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json"`
+For example, you can use `oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression`
 for the prompt initialization in PowerShell.
 
 
@@ -141,3 +184,4 @@ for the prompt initialization in PowerShell.
 [linux]: /docs/installation/linux
 [themes]: /docs/themes
 [report-false-positive]: https://docs.microsoft.com/en-us/microsoft-365/security/defender/m365d-autoir-report-false-positives-negatives#report-a-false-positivenegative-to-microsoft-for-analysis
+[choco-maintainer]: https://github.com/digitalcoyote/chocolatey-packages

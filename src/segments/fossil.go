@@ -11,11 +11,11 @@ func (s *FossilStatus) add(code string) {
 	switch code {
 	case "CONFLICT":
 		s.Conflicted++
-	case "DELETED":
+	case "DELETED", "MISSING":
 		s.Deleted++
-	case "ADDED":
+	case "ADDED", "ADDED_BY_INTEGRATE", "ADDED_BY_MERGE":
 		s.Added++
-	case "EDITED", "UPDATED", "CHANGED":
+	case "EDITED", "UPDATED", "UPDATED_BY_INTEGRATE", "UPDATED_BY_MERGE", "CHANGED":
 		s.Modified++
 	case "RENAMED":
 		s.Moved++
@@ -27,10 +27,9 @@ const (
 )
 
 type Fossil struct {
-	scm
-
 	Status *FossilStatus
 	Branch string
+	scm
 }
 
 func (f *Fossil) Template() string {
@@ -41,13 +40,16 @@ func (f *Fossil) Enabled() bool {
 	if !f.hasCommand(FOSSILCOMMAND) {
 		return false
 	}
+
 	// run fossil command
 	output, err := f.env.RunCommand(f.command, "status")
 	if err != nil {
 		return false
 	}
+
 	f.Status = &FossilStatus{}
 	lines := strings.Split(output, "\n")
+
 	for _, line := range lines {
 		if len(line) == 0 {
 			continue
@@ -63,5 +65,6 @@ func (f *Fossil) Enabled() bool {
 			f.Status.add(context[0])
 		}
 	}
+
 	return true
 }

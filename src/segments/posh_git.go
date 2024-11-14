@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/jandedobbeleer/oh-my-posh/src/log"
 )
 
 const (
@@ -11,18 +13,18 @@ const (
 )
 
 type poshGit struct {
+	Index        *poshGitStatus `json:"Index"`
+	Working      *poshGitStatus `json:"Working"`
+	RepoName     string         `json:"RepoName"`
+	Branch       string         `json:"Branch"`
+	GitDir       string         `json:"GitDir"`
+	Upstream     string         `json:"Upstream"`
 	StashCount   int            `json:"StashCount"`
 	AheadBy      int            `json:"AheadBy"`
-	Index        *poshGitStatus `json:"Index"`
-	RepoName     string         `json:"RepoName"`
-	HasWorking   bool           `json:"HasWorking"`
-	Branch       string         `json:"Branch"`
-	HasIndex     bool           `json:"HasIndex"`
-	GitDir       string         `json:"GitDir"`
 	BehindBy     int            `json:"BehindBy"`
+	HasWorking   bool           `json:"HasWorking"`
+	HasIndex     bool           `json:"HasIndex"`
 	HasUntracked bool           `json:"HasUntracked"`
-	Working      *poshGitStatus `json:"Working"`
-	Upstream     string         `json:"Upstream"`
 }
 
 type poshGitStatus struct {
@@ -36,6 +38,7 @@ func (s *GitStatus) parsePoshGitStatus(p *poshGitStatus) {
 	if p == nil {
 		return
 	}
+
 	s.Added = len(p.Added)
 	s.Deleted = len(p.Deleted)
 	s.Modified = len(p.Modified)
@@ -45,13 +48,17 @@ func (s *GitStatus) parsePoshGitStatus(p *poshGitStatus) {
 func (g *Git) hasPoshGitStatus() bool {
 	envStatus := g.env.Getenv(poshGitEnv)
 	if len(envStatus) == 0 {
+		log.Error(fmt.Errorf("%s environment variable not set, do you have the posh-git module installed?", poshGitEnv))
 		return false
 	}
+
 	var posh poshGit
 	err := json.Unmarshal([]byte(envStatus), &posh)
 	if err != nil {
+		log.Error(err)
 		return false
 	}
+
 	g.setDir(posh.GitDir)
 	g.Working = &GitStatus{}
 	g.Working.parsePoshGitStatus(posh.Working)
@@ -63,10 +70,13 @@ func (g *Git) hasPoshGitStatus() bool {
 	g.Behind = posh.BehindBy
 	g.UpstreamGone = len(posh.Upstream) == 0
 	g.Upstream = posh.Upstream
+
 	g.setBranchStatus()
+
 	if len(g.Upstream) != 0 && g.props.GetBool(FetchUpstreamIcon, false) {
 		g.UpstreamIcon = g.getUpstreamIcon()
 	}
+
 	g.poshgit = true
 	return true
 }
@@ -85,5 +95,5 @@ func (g *Git) parsePoshGitHEAD(head string) string {
 		return fmt.Sprintf("%s%s", g.props.GetString(TagIcon, "\uF412"), head)
 	}
 	// regular branch
-	return fmt.Sprintf("%s%s", g.props.GetString(BranchIcon, "\uE0A0"), g.formatHEAD(head))
+	return fmt.Sprintf("%s%s", g.props.GetString(BranchIcon, "\uE0A0"), g.formatBranch(head))
 }

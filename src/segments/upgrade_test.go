@@ -6,23 +6,24 @@ import (
 	"testing"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/build"
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
+	cache_ "github.com/jandedobbeleer/oh-my-posh/src/cache/mock"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 	"github.com/jandedobbeleer/oh-my-posh/src/upgrade"
 
 	"github.com/alecthomas/assert"
-	mock2 "github.com/stretchr/testify/mock"
+	testify_ "github.com/stretchr/testify/mock"
 )
 
 func TestUpgrade(t *testing.T) {
 	cases := []struct {
+		Error           error
 		Case            string
-		ExpectedEnabled bool
-		HasCache        bool
 		CurrentVersion  string
 		LatestVersion   string
 		CachedVersion   string
-		Error           error
+		ExpectedEnabled bool
+		HasCache        bool
 	}{
 		{
 			Case:            "Should upgrade",
@@ -65,8 +66,8 @@ func TestUpgrade(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		env := new(mock.MockedEnvironment)
-		cache := &mock.MockedCache{}
+		env := new(mock.Environment)
+		cache := &cache_.Cache{}
 
 		env.On("Cache").Return(cache)
 		if len(tc.CachedVersion) == 0 {
@@ -74,17 +75,15 @@ func TestUpgrade(t *testing.T) {
 		}
 		cacheData := fmt.Sprintf(`{"latest":"%s", "current": "%s"}`, tc.LatestVersion, tc.CachedVersion)
 		cache.On("Get", UPGRADECACHEKEY).Return(cacheData, tc.HasCache)
-		cache.On("Set", mock2.Anything, mock2.Anything, mock2.Anything)
+		cache.On("Set", testify_.Anything, testify_.Anything, testify_.Anything)
 
 		build.Version = tc.CurrentVersion
 
 		json := fmt.Sprintf(`{"tag_name":"v%s"}`, tc.LatestVersion)
 		env.On("HTTPRequest", upgrade.RELEASEURL).Return([]byte(json), tc.Error)
 
-		ug := &Upgrade{
-			env:   env,
-			props: properties.Map{},
-		}
+		ug := &Upgrade{}
+		ug.Init(properties.Map{}, env)
 
 		enabled := ug.Enabled()
 

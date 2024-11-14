@@ -2,20 +2,15 @@ package segments
 
 import (
 	"encoding/json"
-
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 )
 
 type Nbgv struct {
-	props properties.Properties
-	env   platform.Environment
+	base
 
 	VersionInfo
 }
 
 type VersionInfo struct {
-	VersionFileFound             bool   `json:"VersionFileFound"`
 	Version                      string `json:"Version"`
 	AssemblyVersion              string `json:"AssemblyVersion"`
 	AssemblyInformationalVersion string `json:"AssemblyInformationalVersion"`
@@ -23,6 +18,7 @@ type VersionInfo struct {
 	ChocolateyPackageVersion     string `json:"ChocolateyPackageVersion"`
 	NpmPackageVersion            string `json:"NpmPackageVersion"`
 	SimpleVersion                string `json:"SimpleVersion"`
+	VersionFileFound             bool   `json:"VersionFileFound"`
 }
 
 func (n *Nbgv) Template() string {
@@ -44,9 +40,4 @@ func (n *Nbgv) Enabled() bool {
 		return false
 	}
 	return n.VersionInfo.VersionFileFound
-}
-
-func (n *Nbgv) Init(props properties.Properties, env platform.Environment) {
-	n.props = props
-	n.env = env
 }

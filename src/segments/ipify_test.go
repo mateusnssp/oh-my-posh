@@ -5,18 +5,14 @@ import (
 	"net"
 	"testing"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 
 	"github.com/stretchr/testify/assert"
-	mock2 "github.com/stretchr/testify/mock"
-)
-
-const (
-	IPIFYAPIURL = "https://api.ipify.org"
+	testify_ "github.com/stretchr/testify/mock"
 )
 
 type mockedipAPI struct {
-	mock2.Mock
+	testify_.Mock
 }
 
 func (s *mockedipAPI) Get() (*ipData, error) {
@@ -66,6 +62,6 @@ func TestIpifySegment(t *testing.T) {
 			continue
 		}
 
-		assert.Equal(t, tc.ExpectedString, renderTemplate(&mock.MockedEnvironment{}, ipify.Template(), ipify), tc.Case)
+		assert.Equal(t, tc.ExpectedString, renderTemplate(&mock.Environment{}, ipify.Template(), ipify), tc.Case)
 	}
 }

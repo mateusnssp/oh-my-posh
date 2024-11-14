@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 	"github.com/jandedobbeleer/oh-my-posh/src/upgrade"
 	"github.com/spf13/cobra"
 )
@@ -14,19 +14,21 @@ var noticeCmd = &cobra.Command{
 	Short: "Print the upgrade notice when a new version is available.",
 	Long:  "Print the upgrade notice when a new version is available.",
 	Args:  cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
-		env := &platform.Shell{
-			CmdFlags: &platform.Flags{},
+	Run: func(_ *cobra.Command, _ []string) {
+		flags := &runtime.Flags{
+			SaveCache: true,
 		}
-		env.Init()
+
+		env := &runtime.Terminal{}
+		env.Init(flags)
 		defer env.Close()
 
-		if notice, hasNotice := upgrade.Notice(env); hasNotice {
+		if notice, hasNotice := upgrade.Notice(env, false); hasNotice {
 			fmt.Println(notice)
 		}
 	},
 }
 
-func init() { //nolint:gochecknoinits
+func init() {
 	RootCmd.AddCommand(noticeCmd)
 }

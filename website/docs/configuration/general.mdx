@@ -12,7 +12,7 @@ A really simple configuration could look like this. The default format is `json`
 There's a [schema][schema] available which is kept up-to-date and helps with autocomplete and validation of the configuration.
 
 :::info
-There are a few [themes][themes] available which are basically predefined configs. You can use these as they are, or as a
+There are a few [themes][themes] available which are basically predefined configurations. You can use these as they are, or as a
 starting point to create your own configuration.
 :::
 
@@ -31,7 +31,7 @@ starting point to create your own configuration.
 {
   "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
   "final_space": true,
-  "version": 2,
+  "version": 3,
   "blocks": [
     {
       "type": "prompt",
@@ -59,7 +59,7 @@ starting point to create your own configuration.
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json
 final_space: true
-version: 2
+version: 3
 blocks:
   - type: prompt
     alignment: left
@@ -107,7 +107,7 @@ escape characters to see the prompt as it would be shown inside a prompt functio
 :::caution
 The command below will not persist the configuration for your shell but print the prompt in your terminal.
 If you want to use your own configuration permanently, adjust the prompt configuration to use your custom
-theme.
+configuration.
 :::
 
 ```bash
@@ -124,24 +124,27 @@ For example, the following is a valid `--config` flag:
 `--config 'https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/jandedobbeleer.omp.json'`
 :::
 
-## General Settings
+## Settings
 
-| Name                         | Type             | Description                                                                                                                                                                           |
-| ---------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `final_space`                | `boolean`        | when true adds a space at the end of the prompt                                                                                                                                       |
-| `pwd`                        | `string`         | notify terminal of current working directory, values can be `osc99`, `osc7`, or `osc51` depending on your terminal                                                                    |
-| `terminal_background`        | `string`         | [color][colors] - terminal background color, set to your terminal's background color when you notice black elements in Windows Terminal or the Visual Studio Code integrated terminal |
-| `accent_color`               | `string`         | [color][colors] - accent color, used as a fallback when the `accent` [color][accent] is not supported                                                                                 |
-| `var`                        | `map[string]any` | config variables to use in [templates][templates]. Can be any value                                                                                                                   |
-| `shell_integration`          | `boolean`        | enable shell integration using FinalTerm's OSC sequences. Works in bash, cmd (Clink v1.14.25+), fish, powershell and zsh                                                              |
-| `disable_cursor_positioning` | `boolean`        | disable fetching the cursor position in bash and zsh in case of unwanted side-effects                                                                                                 |
-| `patch_pwsh_bleed`           | `boolean`        | patch a PowerShell bug where the background colors bleed into the next line at the end of the buffer (can be removed when [this][pwsh-bleed] is merged)                               |
+| Name                        | Type             | Default | Description                                                                                                                                                                                                                                                                  |
+| --------------------------- | ---------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `final_space`               | `boolean`        |         | when true adds a space at the end of the prompt                                                                                                                                                                                                                              |
+| `pwd`                       | `string`         |         | notify terminal of current working directory, values can be `osc99`, `osc7` or `osc51` depending on your terminal. Supports [templates][templates]                                                                                                                           |
+| `terminal_background`       | `string`         |         | [color][colors] - terminal background color, set to your terminal's background color when you notice black elements in Windows Terminal or the Visual Studio Code integrated terminal                                                                                        |
+| `accent_color`              | `string`         |         | [color][colors] - accent color, used as a fallback when the `accent` [color][accent] is not supported                                                                                                                                                                        |
+| `var`                       | `map[string]any` |         | config variables to use in [templates][templates]. Can be any value                                                                                                                                                                                                          |
+| `shell_integration`         | `boolean`        | `false` | enable shell integration using FinalTerm's OSC sequences. Works in bash, cmd (Clink v1.14.25+), fish, powershell and zsh                                                                                                                                                     |
+| `enable_cursor_positioning` | `boolean`        | `false` | enable fetching the cursor position in bash and zsh to allow automatic hiding of leading newlines when at the top of the shell                                                                                                                                               |
+| `patch_pwsh_bleed`          | `boolean`        | `false` | patch a PowerShell bug where the background colors bleed into the next line at the end of the buffer (can be removed when [this][pwsh-bleed] is merged)                                                                                                                      |
+| `upgrade_notice`            | `boolean`        | `false` | enable the notice that a new upgrade is available when `auto_upgrade` is disabled                                                                                                                                                                                            |
+| `auto_upgrade`              | `boolean`        | `false` | enable [automatic upgrades][upgrade] for Oh My Posh (supports Windows, macOS and Linux)                                                                                                                                                                                                 |
+| `iterm_features`            | `[]string`       | `false` | enable iTerm2 specific features:<ul><li>`prompt_mark`: add the `iterm2_prompt_mark` [function][iterm2-si] for supported shells</li><li>`current_dir`: expose the current directory for iTerm2</li><li>`remote_host`: expose the current remote and user for iTerm2</li></ul> |
 
 ### JSON Schema Validation
 
-As mentioned above, Oh My Posh themes can utilize JSON Schema to validate their contents. Themes should include a link to
+As mentioned above, Oh My Posh configurations can utilize JSON Schema to validate their contents. Configurations should include a link to
 the [external schema document][schema] which prescribes the appropriate structure and contents for various elements. If
-your code editor is configured to use JSON Schema, it will compare your custom theme to the external document, and issue
+your code editor is configured to use JSON Schema, it will compare your configuration to the external document, and issue
 warnings for discrepancies.
 
 For example, given the following code:
@@ -158,12 +161,12 @@ For example, given the following code:
 ```
 
 Warnings will be raised for type, since `an_invalid_entry` is not in the list of acceptable values, as well as
-for the entire segment item (enclosed in {}), since it lacks the required `style` key. Take advantage of these
+for the entire segment item (enclosed in `{}`), since it lacks the required `style` key. Take advantage of these
 warnings, and ignore them at your peril.
 
 ### Accepted Formats
 
-Oh My Posh supports three file formats for themes: `json`, `yaml`, and `toml`.
+Oh My Posh supports three file formats for configurations: `json`, `yaml`, and `toml`.
 
 Various converters exist to convert between these, although they aren't perfect and will require manual
 adjustment. Notably, the schema implementation for json is as follows:
@@ -190,3 +193,5 @@ Converters won't catch this change, so you will need to adjust manually.
 [accent]: /docs/configuration/colors#standard-colors
 [templates]: /docs/configuration/templates#config-variables
 [pwsh-bleed]: https://github.com/PowerShell/PowerShell/pull/19019
+[iterm2-si]: https://iterm2.com/documentation-shell-integration.html
+[upgrade]: /docs/installation/upgrade#automatic

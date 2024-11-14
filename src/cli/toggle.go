@@ -3,8 +3,8 @@ package cli
 import (
 	"strings"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
-
+	"github.com/jandedobbeleer/oh-my-posh/src/cache"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 	"github.com/spf13/cobra"
 )
 
@@ -19,12 +19,16 @@ var toggleCmd = &cobra.Command{
 			_ = cmd.Help()
 			return
 		}
-		env := &platform.Shell{}
-		env.Init()
+
+		flags := &runtime.Flags{
+			SaveCache: true,
+		}
+
+		env := &runtime.Terminal{}
+		env.Init(flags)
 		defer env.Close()
 
-		cache := env.Cache()
-		togglesCache, _ := cache.Get(platform.TOGGLECACHE)
+		togglesCache, _ := env.Session().Get(cache.TOGGLECACHE)
 		var toggles []string
 		if len(togglesCache) != 0 {
 			toggles = strings.Split(togglesCache, ",")
@@ -45,10 +49,10 @@ var toggleCmd = &cobra.Command{
 			newToggles = append(newToggles, segment)
 		}
 
-		cache.Set(platform.TOGGLECACHE, strings.Join(newToggles, ","), 1440)
+		env.Session().Set(cache.TOGGLECACHE, strings.Join(newToggles, ","), cache.ONEDAY)
 	},
 }
 
-func init() { //nolint:gochecknoinits
+func init() {
 	RootCmd.AddCommand(toggleCmd)
 }

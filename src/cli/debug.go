@@ -4,56 +4,86 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/ansi"
 	"github.com/jandedobbeleer/oh-my-posh/src/build"
-	"github.com/jandedobbeleer/oh-my-posh/src/engine"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
-	"github.com/jandedobbeleer/oh-my-posh/src/shell"
+	"github.com/jandedobbeleer/oh-my-posh/src/config"
+	"github.com/jandedobbeleer/oh-my-posh/src/log"
+	"github.com/jandedobbeleer/oh-my-posh/src/prompt"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/template"
+	"github.com/jandedobbeleer/oh-my-posh/src/terminal"
 
 	"github.com/spf13/cobra"
 )
 
 // debugCmd represents the prompt command
-var debugCmd = &cobra.Command{
-	Use:   "debug",
-	Short: "Print the prompt in debug mode",
-	Long:  "Print the prompt in debug mode.",
-	Args:  cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
-		startTime := time.Now()
-		env := &platform.Shell{
-			CmdFlags: &platform.Flags{
-				Config: config,
-				Debug:  true,
-				PWD:    pwd,
-				Shell:  shellName,
-				Plain:  plain,
-			},
-		}
-		env.Init()
-		defer env.Close()
-		cfg := engine.LoadConfig(env)
-		writerColors := cfg.MakeColors()
-		writer := &ansi.Writer{
-			TerminalBackground: shell.ConsoleBackgroundColor(env, cfg.TerminalBackground),
-			AnsiColors:         writerColors,
-			Plain:              plain,
-			TrueColor:          env.CmdFlags.TrueColor,
-		}
-		writer.Init(shell.GENERIC)
-		eng := &engine.Engine{
-			Config: cfg,
-			Env:    env,
-			Writer: writer,
-			Plain:  plain,
-		}
-		fmt.Print(eng.PrintDebug(startTime, build.Version))
-	},
+var debugCmd = createDebugCmd()
+
+func init() {
+	RootCmd.AddCommand(debugCmd)
 }
 
-func init() { //nolint:gochecknoinits
+func createDebugCmd() *cobra.Command {
+	debugCmd := &cobra.Command{
+		Use:       "debug [bash|zsh|fish|powershell|pwsh|cmd|nu|tcsh|elvish|xonsh]",
+		Short:     "Print the prompt in debug mode",
+		Long:      "Print the prompt in debug mode.",
+		ValidArgs: supportedShells,
+		Args:      NoArgsOrOneValidArg,
+		Run: func(cmd *cobra.Command, args []string) {
+			startTime := time.Now()
+
+			if len(args) == 0 {
+				_ = cmd.Help()
+				return
+			}
+
+			log.Enable()
+			log.Debug("debug mode enabled")
+
+			configFile := config.Path(configFlag)
+			cfg := config.Load(configFile, args[0], false)
+
+			flags := &runtime.Flags{
+				Config: configFile,
+				Debug:  true,
+				PWD:    pwd,
+				Shell:  args[0],
+				Plain:  plain,
+			}
+
+			env := &runtime.Terminal{}
+			env.Init(flags)
+
+			template.Init(env, cfg.Var)
+
+			defer func() {
+				template.SaveCache()
+				env.Close()
+			}()
+
+			terminal.Init(args[0])
+			terminal.BackgroundColor = cfg.TerminalBackground.ResolveTemplate()
+			terminal.Colors = cfg.MakeColors(env)
+			terminal.Plain = plain
+
+			eng := &prompt.Engine{
+				Config: cfg,
+				Env:    env,
+				Plain:  plain,
+			}
+
+			fmt.Print(eng.PrintDebug(startTime, build.Version))
+		},
+	}
+
 	debugCmd.Flags().StringVar(&pwd, "pwd", "", "current working directory")
-	debugCmd.Flags().StringVar(&shellName, "shell", "", "the shell to print for")
 	debugCmd.Flags().BoolVarP(&plain, "plain", "p", false, "plain text output (no ANSI)")
-	RootCmd.AddCommand(debugCmd)
+
+	// Deprecated flags, should be kept to avoid breaking CLI integration.
+	debugCmd.Flags().StringVar(&shellName, "shell", "", "the shell to print for")
+
+	// Hide flags that are deprecated or for internal use only.
+	_ = debugCmd.Flags().MarkHidden("shell")
+
+	return debugCmd
 }

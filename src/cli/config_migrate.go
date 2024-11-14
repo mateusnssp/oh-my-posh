@@ -3,8 +3,9 @@ package cli
 import (
 	"fmt"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/engine"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
+	"github.com/jandedobbeleer/oh-my-posh/src/config"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/shell"
 
 	"github.com/spf13/cobra"
 )
@@ -38,16 +39,19 @@ Migrates the ~/myconfig.omp.json config file to TOML and writes the result to yo
 
 A backup of the current config can be found at ~/myconfig.omp.json.bak.`,
 	Args: cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
-		env := &platform.Shell{
-			CmdFlags: &platform.Flags{
-				Config:  config,
-				Migrate: true,
-			},
+	Run: func(_ *cobra.Command, _ []string) {
+		configFile := config.Path(configFlag)
+		cfg := config.Load(configFile, shell.GENERIC, true)
+
+		flags := &runtime.Flags{
+			Config:  configFile,
+			Migrate: true,
 		}
-		env.Init()
+
+		env := &runtime.Terminal{}
+		env.Init(flags)
 		defer env.Close()
-		cfg := engine.LoadConfig(env)
+
 		if write {
 			cfg.BackupAndMigrate()
 			return
@@ -57,7 +61,7 @@ A backup of the current config can be found at ~/myconfig.omp.json.bak.`,
 	},
 }
 
-func init() { //nolint:gochecknoinits
+func init() {
 	migrateCmd.Flags().BoolVarP(&write, "write", "w", false, "write the migrated config back to the config file")
 	migrateCmd.Flags().StringVarP(&format, "format", "f", "json", "the config format to migrate to")
 	configCmd.AddCommand(migrateCmd)

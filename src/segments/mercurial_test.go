@@ -3,51 +3,43 @@ package segments
 import (
 	"testing"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMercurialEnabledToolNotFound(t *testing.T) {
-	env := new(mock.MockedEnvironment)
+	env := new(mock.Environment)
 	env.On("InWSLSharedDrive").Return(false)
 	env.On("HasCommand", "hg").Return(false)
 	env.On("GOOS").Return("")
 	env.On("IsWsl").Return(false)
 
-	hg := &Mercurial{
-		scm: scm{
-			env:   env,
-			props: properties.Map{},
-		},
-	}
+	hg := &Mercurial{}
+	hg.Init(properties.Map{}, env)
 
 	assert.False(t, hg.Enabled())
 }
 
 func TestMercurialEnabledInWorkingDirectory(t *testing.T) {
-	fileInfo := &platform.FileInfo{
+	fileInfo := &runtime.FileInfo{
 		Path:         "/dir/hello",
 		ParentFolder: "/dir",
 		IsDir:        true,
 	}
-	env := new(mock.MockedEnvironment)
+	env := new(mock.Environment)
 	env.On("InWSLSharedDrive").Return(false)
 	env.On("HasCommand", "hg").Return(true)
 	env.On("GOOS").Return("")
 	env.On("IsWsl").Return(false)
-	env.On("HasParentFilePath", ".hg").Return(fileInfo, nil)
+	env.On("HasParentFilePath", ".hg", false).Return(fileInfo, nil)
 	env.On("PathSeparator").Return("/")
 	env.On("Home").Return(poshHome)
 	env.On("Getenv", poshGitEnv).Return("")
 
-	hg := &Mercurial{
-		scm: scm{
-			env:   env,
-			props: properties.Map{},
-		},
-	}
+	hg := &Mercurial{}
+	hg.Init(properties.Map{}, env)
 
 	assert.True(t, hg.Enabled())
 	assert.Equal(t, fileInfo.Path, hg.workingDir)
@@ -56,17 +48,17 @@ func TestMercurialEnabledInWorkingDirectory(t *testing.T) {
 
 func TestMercurialGetIdInfo(t *testing.T) {
 	cases := []struct {
+		ExpectedWorking           *MercurialStatus
 		Case                      string
 		LogOutput                 string
 		StatusOutput              string
-		ExpectedWorking           *MercurialStatus
 		ExpectedBranch            string
 		ExpectedChangeSetID       string
 		ExpectedShortID           string
 		ExpectedLocalCommitNumber string
-		ExpectedIsTip             bool
 		ExpectedBookmarks         []string
 		ExpectedTags              []string
+		ExpectedIsTip             bool
 	}{
 		{
 			Case:         "nochanges_tip",
@@ -137,33 +129,30 @@ A Added.File
 	}
 
 	for _, tc := range cases {
-		fileInfo := &platform.FileInfo{
+		fileInfo := &runtime.FileInfo{
 			Path:         "/dir/hello",
 			ParentFolder: "/dir",
 			IsDir:        true,
 		}
+
 		props := properties.Map{
 			FetchStatus: true,
 		}
 
-		env := new(mock.MockedEnvironment)
+		env := new(mock.Environment)
 		env.On("InWSLSharedDrive").Return(false)
 		env.On("HasCommand", "hg").Return(true)
 		env.On("GOOS").Return("")
 		env.On("IsWsl").Return(false)
-		env.On("HasParentFilePath", ".hg").Return(fileInfo, nil)
+		env.On("HasParentFilePath", ".hg", false).Return(fileInfo, nil)
 		env.On("PathSeparator").Return("/")
 		env.On("Home").Return(poshHome)
 		env.On("Getenv", poshGitEnv).Return("")
 		env.MockHgCommand(fileInfo.Path, tc.LogOutput, "log", "-r", ".", "--template", hgLogTemplate)
 		env.MockHgCommand(fileInfo.Path, tc.StatusOutput, "status")
 
-		hg := &Mercurial{
-			scm: scm{
-				env:   env,
-				props: props,
-			},
-		}
+		hg := &Mercurial{}
+		hg.Init(props, env)
 
 		if tc.ExpectedWorking != nil {
 			tc.ExpectedWorking.Formats = map[string]string{}

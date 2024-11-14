@@ -5,21 +5,28 @@
 package font
 
 import (
-	"io/ioutil" //nolint:staticcheck,nolintlint
 	"os"
 	"path"
 	"strings"
 )
 
-// FontsDir denotes the path to the user's fonts directory on Unix-like systems.
-var FontsDir = path.Join(os.Getenv("HOME"), "/.local/share/fonts")
+var (
+	fontsDir       = path.Join(os.Getenv("HOME"), "/.local/share/fonts")
+	systemFontsDir = "/usr/share/fonts"
+)
 
 func install(font *Font, _ bool) error {
+	// If we're running as root, install the font system-wide.
+	targetDir := fontsDir
+	if os.Geteuid() == 0 {
+		targetDir = systemFontsDir
+	}
+
 	// On Linux, fontconfig can understand subdirectories. So, to keep the
 	// font directory clean, install all font files for a particular font
 	// family into a subdirectory named after the family (with hyphens instead
 	// of spaces).
-	fullPath := path.Join(FontsDir,
+	fullPath := path.Join(targetDir,
 		strings.ToLower(strings.ReplaceAll(font.Family, " ", "-")),
 		path.Base(font.FileName))
 
@@ -27,5 +34,5 @@ func install(font *Font, _ bool) error {
 		return err
 	}
 
-	return ioutil.WriteFile(fullPath, font.Data, 0644)
+	return os.WriteFile(fullPath, font.Data, 0644)
 }

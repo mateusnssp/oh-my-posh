@@ -1,7 +1,6 @@
 package segments
 
 import (
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 
 	"golang.org/x/mod/modfile"
@@ -19,31 +18,11 @@ func (g *Golang) Template() string {
 	return languageTemplate
 }
 
-func (g *Golang) Init(props properties.Properties, env platform.Environment) {
-	g.language = language{
-		env:        env,
-		props:      props,
-		extensions: []string{"*.go", "go.mod"},
-		commands: []*cmd{
-			{
-				regex:      `(?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+)(.(?P<patch>[0-9]+))?))`,
-				getVersion: g.getVersion,
-			},
-			{
-				executable: "go",
-				args:       []string{"version"},
-				regex:      `(?:go(?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+)(.(?P<patch>[0-9]+))?)))`,
-			},
-		},
-		versionURLTemplate: "https://golang.org/doc/go{{ .Major }}.{{ .Minor }}",
-	}
-}
-
 func (g *Golang) getVersion() (string, error) {
 	if !g.props.GetBool(ParseModFile, false) {
 		return "", nil
 	}
-	gomod, err := g.language.env.HasParentFilePath("go.mod")
+	gomod, err := g.language.env.HasParentFilePath("go.mod", false)
 	if err != nil {
 		return "", nil
 	}
@@ -56,5 +35,19 @@ func (g *Golang) getVersion() (string, error) {
 }
 
 func (g *Golang) Enabled() bool {
+	g.extensions = []string{"*.go", "go.mod"}
+	g.commands = []*cmd{
+		{
+			regex:      `(?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+)(.(?P<patch>[0-9]+))?))`,
+			getVersion: g.getVersion,
+		},
+		{
+			executable: "go",
+			args:       []string{"version"},
+			regex:      `(?:go(?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+)(.(?P<patch>[0-9]+))?)))`,
+		},
+	}
+	g.versionURLTemplate = "https://golang.org/doc/go{{ .Major }}.{{ .Minor }}"
+
 	return g.language.Enabled()
 }

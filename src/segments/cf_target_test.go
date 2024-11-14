@@ -6,22 +6,22 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCFTargetSegment(t *testing.T) {
 	cases := []struct {
+		CommandError   error
+		FileInfo       *runtime.FileInfo
 		Case           string
 		Template       string
 		ExpectedString string
 		DisplayMode    string
-		FileInfo       *platform.FileInfo
 		TargetOutput   string
-		CommandError   error
 	}{
 		{
 			Case:         "not logged in to CF account",
@@ -51,20 +51,20 @@ func TestCFTargetSegment(t *testing.T) {
 			Case:           "files and a manifest file",
 			ExpectedString: "12345678trial/dev",
 			DisplayMode:    DisplayModeFiles,
-			FileInfo:       &platform.FileInfo{},
+			FileInfo:       &runtime.FileInfo{},
 			TargetOutput:   "API endpoint: https://api.cf.eu10.hana.ondemand.com\nAPI version: 3.109.0\nuser: user@some.com\norg: 12345678trial\nspace: dev",
 		},
 		{
 			Case:        "files and a manifest directory",
 			DisplayMode: DisplayModeFiles,
-			FileInfo: &platform.FileInfo{
+			FileInfo: &runtime.FileInfo{
 				IsDir: true,
 			},
 		},
 	}
 
 	for _, tc := range cases {
-		var env = new(mock.MockedEnvironment)
+		var env = new(mock.Environment)
 		env.On("HasCommand", "cf").Return(true)
 		env.On("RunCommand", "cf", []string{"target"}).Return(tc.TargetOutput, tc.CommandError)
 		env.On("Pwd", nil).Return("/usr/home/dev/my-app")
@@ -73,7 +73,7 @@ func TestCFTargetSegment(t *testing.T) {
 		if tc.FileInfo == nil {
 			err = errors.New("no such file or directory")
 		}
-		env.On("HasParentFilePath", "manifest.yml").Return(tc.FileInfo, err)
+		env.On("HasParentFilePath", "manifest.yml", false).Return(tc.FileInfo, err)
 
 		cfTarget := &CfTarget{}
 		props := properties.Map{

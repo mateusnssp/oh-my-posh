@@ -3,11 +3,9 @@ package cli
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
+	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 
 	"github.com/spf13/cobra"
 )
@@ -34,45 +32,27 @@ You can do the following:
 			_ = cmd.Help()
 			return
 		}
-		env := &platform.Shell{
-			CmdFlags: &platform.Flags{},
-		}
-		env.Init()
-		defer env.Close()
+
 		switch args[0] {
 		case "path":
-			fmt.Print(env.CachePath())
+			fmt.Println(cache.Path())
 		case "clear":
-			cacheFilePath := filepath.Join(env.CachePath(), platform.CacheFile)
-			err := os.Remove(cacheFilePath)
+			deletedFiles, err := cache.Clear(cache.Path(), true)
 			if err != nil {
-				fmt.Println(err.Error())
+				fmt.Println(err)
 				return
 			}
-			fmt.Printf("removed cache file at %s\n", cacheFilePath)
+
+			for _, file := range deletedFiles {
+				fmt.Println("removed cache file:", file)
+			}
 		case "edit":
-			cacheFilePath := filepath.Join(env.CachePath(), platform.CacheFile)
-			editFileWithEditor(cacheFilePath)
+			cacheFilePath := filepath.Join(cache.Path(), cache.FileName)
+			os.Exit(editFileWithEditor(cacheFilePath))
 		}
 	},
 }
 
-func init() { //nolint:gochecknoinits
+func init() {
 	RootCmd.AddCommand(getCache)
-}
-
-func editFileWithEditor(file string) {
-	editor := os.Getenv("EDITOR")
-	var args []string
-	if strings.Contains(editor, " ") {
-		splitted := strings.Split(editor, " ")
-		editor = splitted[0]
-		args = splitted[1:]
-	}
-	args = append(args, file)
-	cmd := exec.Command(editor, args...)
-	err := cmd.Run()
-	if err != nil {
-		fmt.Println(err.Error())
-	}
 }

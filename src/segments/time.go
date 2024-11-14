@@ -3,13 +3,11 @@ package segments
 import (
 	"time"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 )
 
 type Time struct {
-	props properties.Properties
-	env   platform.Environment
+	base
 
 	CurrentDate time.Time
 	Format      string
@@ -31,9 +29,4 @@ func (t *Time) Enabled() bool {
 		t.CurrentDate = time.Now()
 	}
 	return true
-}
-
-func (t *Time) Init(props properties.Properties, env platform.Environment) {
-	t.props = props
-	t.env = env
 }

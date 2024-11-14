@@ -3,9 +3,9 @@ package segments
 import (
 	"testing"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/mock"
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -14,9 +14,9 @@ func TestPoshGitSegment(t *testing.T) {
 	cases := []struct {
 		Case              string
 		PoshGitJSON       string
-		FetchUpstreamIcon bool
 		Template          string
 		ExpectedString    string
+		FetchUpstreamIcon bool
 		ExpectedEnabled   bool
 	}{
 		{
@@ -182,24 +182,28 @@ func TestPoshGitSegment(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		env := new(mock.MockedEnvironment)
+		env := new(mock.Environment)
 		env.On("Getenv", poshGitEnv).Return(tc.PoshGitJSON)
 		env.On("Home").Return("/Users/bill")
-		env.On("GOOS").Return(platform.LINUX)
+		env.On("GOOS").Return(runtime.LINUX)
 		env.On("RunCommand", "git", []string{"-C", "", "--no-optional-locks", "-c", "core.quotepath=false",
 			"-c", "color.status=false", "remote", "get-url", "origin"}).Return("github.com/cli", nil)
+
+		props := &properties.Map{
+			FetchUpstreamIcon: tc.FetchUpstreamIcon,
+		}
+
 		g := &Git{
 			scm: scm{
-				env: env,
-				props: &properties.Map{
-					FetchUpstreamIcon: tc.FetchUpstreamIcon,
-				},
 				command: GITCOMMAND,
 			},
 		}
+		g.Init(props, env)
+
 		if len(tc.Template) == 0 {
 			tc.Template = g.Template()
 		}
+
 		assert.Equal(t, tc.ExpectedEnabled, g.hasPoshGitStatus(), tc.Case)
 		if tc.ExpectedEnabled {
 			assert.Equal(t, tc.ExpectedString, renderTemplate(env, tc.Template, g), tc.Case)
@@ -231,11 +235,9 @@ func TestParsePoshGitHEAD(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		g := &Git{
-			scm: scm{
-				props: &properties.Map{},
-			},
-		}
+		g := &Git{}
+		g.Init(&properties.Map{}, new(mock.Environment))
+
 		assert.Equal(t, tc.ExpectedString, g.parsePoshGitHEAD(tc.HEAD), tc.Case)
 	}
 }

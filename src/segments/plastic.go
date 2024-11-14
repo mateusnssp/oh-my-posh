@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/platform"
 	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/regex"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 )
 
 type PlasticStatus struct {
@@ -28,17 +28,15 @@ func (s *PlasticStatus) add(code string) {
 }
 
 type Plastic struct {
+	Status                 *PlasticStatus
+	Selector               string
+	plasticWorkspaceFolder string
 	scm
-
-	Status       *PlasticStatus
 	Behind       bool
-	Selector     string
 	MergePending bool
-
-	plasticWorkspaceFolder string // root folder of workspace
 }
 
-func (p *Plastic) Init(props properties.Properties, env platform.Environment) {
+func (p *Plastic) Init(props properties.Properties, env runtime.Environment) {
 	p.props = props
 	p.env = env
 }
@@ -51,13 +49,12 @@ func (p *Plastic) Enabled() bool {
 	if !p.env.HasCommand("cm") {
 		return false
 	}
-	wkdir, err := p.env.HasParentFilePath(".plastic")
+
+	wkdir, err := p.env.HasParentFilePath(".plastic", false)
 	if err != nil {
 		return false
 	}
-	if p.shouldIgnoreRootRepository(wkdir.ParentFolder) {
-		return false
-	}
+
 	if !wkdir.IsDir {
 		return false
 	}
@@ -69,6 +66,15 @@ func (p *Plastic) Enabled() bool {
 		p.setPlasticStatus()
 	}
 	return true
+}
+
+func (p *Plastic) CacheKey() (string, bool) {
+	dir, err := p.env.HasParentFilePath(".plastic", true)
+	if err != nil {
+		return "", false
+	}
+
+	return dir.Path, true
 }
 
 func (p *Plastic) setPlasticStatus() {
@@ -137,23 +143,27 @@ func (p *Plastic) getHeadChangeset() int {
 func (p *Plastic) setSelector() {
 	var ref string
 	selector := p.FileContents(p.plasticWorkspaceFolder+"/.plastic/", "plastic.selector")
+
 	// changeset
 	ref = p.parseChangesetSelector(selector)
 	if len(ref) > 0 {
 		p.Selector = fmt.Sprintf("%s%s", p.props.GetString(CommitIcon, "\uF417"), ref)
 		return
 	}
+
 	// fallback to label
 	ref = p.parseLabelSelector(selector)
 	if len(ref) > 0 {
 		p.Selector = fmt.Sprintf("%s%s", p.props.GetString(TagIcon, "\uF412"), ref)
 		return
 	}
+
 	// fallback to branch/smartbranch
 	ref = p.parseBranchSelector(selector)
 	if len(ref) > 0 {
-		ref = p.truncateBranch(ref)
+		ref = p.formatBranch(ref)
 	}
+
 	p.Selector = fmt.Sprintf("%s%s", p.props.GetString(BranchIcon, "\uE0A0"), ref)
 }
 
